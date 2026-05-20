@@ -1991,6 +1991,7 @@ function startDayTick(){
   const max=daysInGameMonth();
   _dayTick=setInterval(()=>{
     if(gameDay<max){gameDay++;updateDateDisplay();}
+    else{clearInterval(_dayTick);_dayTick=null;nextMonth();}
   },1500);
 }
 
