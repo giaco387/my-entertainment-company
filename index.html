@@ -227,7 +227,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 <script>
 const G = {
   money: 1000, fame: 12, month: 1,
-  artists: [], log: [],
+  artists: [], log: [], usedEvents: [],
   monthlyIncome: 0, monthlyCost: 0,
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
@@ -282,7 +282,8 @@ function newGame(){
 
 function init(){
   const hasSave=loadGame();
-  renderBuildings();renderEvents();updateOverview();updateSidebar();
+  if(!G.usedEvents) G.usedEvents=[];
+  renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   if(hasSave) toast('读取存档成功，继续上次游戏','success');
 }
@@ -385,7 +386,9 @@ function upgradeBuilding(k){
 
 function renderEvents(){
   const el=document.getElementById('event-list');
-  el.innerHTML=EVENTS.map((ev,i)=>`
+  el.innerHTML=EVENTS.map((ev,i)=>{
+    const used=G.usedEvents.includes(i);
+    return `
     <div class="event-item">
       <div class="event-icon" style="background:${ev.bg}">${ev.icon}</div>
       <div class="event-info">
@@ -394,20 +397,24 @@ function renderEvents(){
         <div style="font-size:11px;color:#999;margin-top:3px">条件: ${ev.req}${ev.cost>0?' · 报名费: '+ev.cost+'万':''}</div>
         <div class="event-reward">🏅 +${ev.fameGain}声望  💰 +${ev.moneyGain}万</div>
       </div>
-      <button class="btn btn-sm btn-primary" style="flex-shrink:0;align-self:center" onclick="joinEvent(${i})">参加</button>
-    </div>
-  `).join('');
+      <button class="btn btn-sm ${used?'':'btn-primary'}" style="flex-shrink:0;align-self:center" onclick="${used?'':'joinEvent('+i+')'}" ${used?'disabled':''}>
+        ${used?'本月已参加':'参加'}
+      </button>
+    </div>`;
+  }).join('');
 }
 
 function joinEvent(i){
   const ev=EVENTS[i];
+  if(G.usedEvents.includes(i)){toast('本月已参加过此活动','error');return;}
   if(!ev.check()){toast('条件不满足：'+ev.req,'error');return;}
   if(G.money<ev.cost){toast('资金不足！','error');return;}
+  G.usedEvents.push(i);
   G.money-=ev.cost; G.money+=ev.moneyGain; G.fame+=ev.fameGain;
   if(ev.cost>0) addLog(ev.name+' 报名费','minus',ev.cost);
   addLog(ev.name+' 奖励','plus',ev.moneyGain);
   G.artists.forEach(a=>{if(a.status==='工作中'||a.status==='已出道') a.fans=Math.round((a.fans||0)+ev.fameGain/10);});
-  updateStats();updateOverview();updateTips();saveGame();
+  updateStats();updateOverview();updateTips();renderEvents();saveGame();
   toast('活动成功！声望+'+ev.fameGain+'，收入+'+ev.moneyGain+'万','success');
 }
 
@@ -452,6 +459,7 @@ function recruit(i){
 
 function nextMonth(){
   G.month++;
+  G.usedEvents=[];
   let income=0,cost=0;
   const lv=G.buildings;
   if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
@@ -475,7 +483,7 @@ function nextMonth(){
   G.money+=income-cost;
   G.monthlyIncome=income; G.monthlyCost=cost;
   G.fame+=Math.floor(income/25+1);
-  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();saveGame();
+  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();saveGame();
   toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万','success');
 }
 
