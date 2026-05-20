@@ -389,18 +389,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <div style="font-size:12px;color:#999;margin-bottom:10px">当前资金：<strong id="modal-money" style="color:#1a1a1a">1000</strong> 万</div>
     <div style="margin-bottom:12px">
       <div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px;letter-spacing:.5px">合同时长</div>
-      <div style="display:flex;gap:6px">
-        <button id="cd-12" class="btn btn-sm" onclick="selectContractDuration(12)" style="flex:1;flex-direction:column;gap:1px">
-          <span style="font-size:12px;font-weight:600">12 个月</span>
-          <span style="font-size:10px;color:#2e7d32">费用 -25%</span>
+      <div style="display:flex;gap:5px">
+        <button id="cd-12" class="btn btn-sm" onclick="selectContractDuration(12)" style="flex:1;flex-direction:column;gap:1px;padding:6px 3px">
+          <span style="font-size:12px;font-weight:600">1 年</span>
+          <span style="font-size:9px;color:#2e7d32">-30%</span>
         </button>
-        <button id="cd-24" class="btn btn-sm btn-primary" onclick="selectContractDuration(24)" style="flex:1;flex-direction:column;gap:1px">
-          <span style="font-size:12px;font-weight:600">24 个月</span>
-          <span style="font-size:10px;opacity:.7">标准合同</span>
+        <button id="cd-24" class="btn btn-sm btn-primary" onclick="selectContractDuration(24)" style="flex:1;flex-direction:column;gap:1px;padding:6px 3px">
+          <span style="font-size:12px;font-weight:600">2 年</span>
+          <span style="font-size:9px;opacity:.7">标准</span>
         </button>
-        <button id="cd-36" class="btn btn-sm" onclick="selectContractDuration(36)" style="flex:1;flex-direction:column;gap:1px">
-          <span style="font-size:12px;font-weight:600">36 个月</span>
-          <span style="font-size:10px;color:#c62828">费用 +40%</span>
+        <button id="cd-36" class="btn btn-sm" onclick="selectContractDuration(36)" style="flex:1;flex-direction:column;gap:1px;padding:6px 3px">
+          <span style="font-size:12px;font-weight:600">3 年</span>
+          <span style="font-size:9px;color:#e65100">+25%</span>
+        </button>
+        <button id="cd-48" class="btn btn-sm" onclick="selectContractDuration(48)" style="flex:1;flex-direction:column;gap:1px;padding:6px 3px">
+          <span style="font-size:12px;font-weight:600">4 年</span>
+          <span style="font-size:9px;color:#c62828">+50%</span>
+        </button>
+        <button id="cd-60" class="btn btn-sm" onclick="selectContractDuration(60)" style="flex:1;flex-direction:column;gap:1px;padding:6px 3px">
+          <span style="font-size:12px;font-weight:600">5 年</span>
+          <span style="font-size:9px;color:#c62828">+75%</span>
         </button>
       </div>
     </div>
@@ -1575,17 +1583,16 @@ function confirmEventWithArtists(){
 }
 
 let recruitContractMonths=24;
-function contractCostMult(m){return m===12?0.75:m===36?1.4:1.0;}
+function contractCostMult(m){return{12:0.7,24:1.0,36:1.25,48:1.5,60:1.75}[m]||1.0;}
 function calcRecruitCost(base){return Math.round(base*contractCostMult(recruitContractMonths));}
 
 function selectContractDuration(m){
   recruitContractMonths=m;
-  [12,24,36].forEach(v=>{
+  [12,24,36,48,60].forEach(v=>{
     const btn=document.getElementById('cd-'+v);
     if(!btn) return;
-    const on=v===m;
-    btn.className='btn btn-sm'+(on?' btn-primary':'');
-    btn.style.flex='1';btn.style.flexDirection='column';btn.style.gap='1px';
+    btn.className='btn btn-sm'+(v===m?' btn-primary':'');
+    btn.style.flex='1';btn.style.flexDirection='column';btn.style.gap='1px';btn.style.padding='6px 3px';
   });
   renderRecruitList();
 }
