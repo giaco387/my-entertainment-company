@@ -479,7 +479,7 @@ const G = {
   artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false,
   monthlyIncome: 0, monthlyCost: 0,
   activeTrends: [], agents: [], rivals: [],
-  pendingEvents: [], pendingReleases: [], pendingBuilds: [],
+  pendingEvents: [], pendingReleases: [], pendingBuilds: [], lastAwardMonth: 0,
   buildingActions: {},
   buildings: {
     live:     {name:'直播基地',    lv:0, maxLv:8, icon:'📺', cost:80,  effect:'月收入来源'},
@@ -561,6 +561,7 @@ function loadGame(){
     };
     Object.entries(defaultBuildings).forEach(([k,v])=>{if(!G.buildings[k]) G.buildings[k]=v;});
     if(!G.pendingBuilds) G.pendingBuilds=[];
+    if(!G.lastAwardMonth) G.lastAwardMonth=0;
     // 更新旧存档的 maxLv 上限
     const newMaxLv={live:8,practice:8,studio:8,fanshall:6,mv:6,office:6,merch:6,media:6,health:6,legal:6};
     Object.entries(newMaxLv).forEach(([k,m])=>{if(G.buildings[k]&&G.buildings[k].maxLv<m) G.buildings[k].maxLv=m;});
@@ -1843,6 +1844,26 @@ function recruit(i){
 
 function triggerMonthlyEvents(){
   const results=[];
+  // 颁奖典礼邀请：声望≥150、6个月冷却、概率随声望增长
+  if(G.fame>=150 && G.artists.some(a=>a.status==='已出道'||a.status==='工作中')){
+    const cooldown=G.month-(G.lastAwardMonth||0)>=6;
+    const chance=Math.min(0.45,0.15+(G.fame-150)*0.001);
+    if(cooldown&&Math.random()<chance){
+      const eligible=G.artists.filter(a=>a.status==='已出道'||a.status==='工作中');
+      const best=eligible.reduce((b,a)=>{
+        const sa=(a.singing+a.dance+a.acting)/3,sb=(b.singing+b.dance+b.acting)/3;return sa>sb?a:b;
+      });
+      const s=(best.singing+best.dance+best.acting)/3;
+      const trendMult=hasTrend('music_award')?1.8:1;
+      const fameGain=Math.round((100+s*0.8)*trendMult);
+      const moneyGain=Math.round((60+s*0.6)*trendMult);
+      best.fans=Math.round((best.fans||0)+fameGain*0.4);
+      best.pr=Math.min(100,(best.pr||60)+18);
+      G.fame+=15; G.money+=moneyGain; G.lastAwardMonth=G.month;
+      addLog('颁奖典礼出席','plus',moneyGain);
+      results.push({name:'🏆 颁奖典礼邀请',desc:displayName(best)+'受邀出席年度颁奖典礼，荣获大奖！声望+15 · 收益+'+moneyGain+'万',icon:'🏆',type:'good'});
+    }
+  }
   if(G.month%3===0){
     const pool=MONTHLY_EVENTS.industry.filter(e=>!e.check||e.check());
     if(pool.length){

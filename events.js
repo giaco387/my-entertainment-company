@@ -71,26 +71,6 @@ const EVENTS = [
     }
   },
   {
-    name:'颁奖典礼', icon:'🏆', bg:'#fff7ed',
-    desc:'参加年度颁奖典礼，以最强阵容角逐大奖',
-    cost:20, minArtists:1, statHint:'综合实力', duration:1,
-    req:'需声望≥150 且出道艺人',
-    check()    { return G.fame >= 150 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
-    compute(sel) {
-      const best  = sel.reduce((b, a) => { const sa = (a.singing + a.dance + a.acting) / 3, sb = (b.singing + b.dance + b.acting) / 3; return sa > sb ? a : b; });
-      const s     = (best.singing + best.dance + best.acting) / 3;
-      const bonus = sel.length > 1 ? (sel.length - 1) * 15 : 0;
-      return { fame: Math.round(120 + s * 0.8 + bonus), money: Math.round(60 + s * 0.5 + bonus * 0.5) };
-    },
-    apply(sel, r) {
-      sel.forEach(a => { a.fans = Math.round((a.fans || 0) + r.fame * 0.3); a.pr = Math.min(100, (a.pr || 60) + 15); });
-      G.fame += 10;
-      const best = sel.reduce((b, a) => { const sa = (a.singing + a.dance + a.acting) / 3, sb = (b.singing + b.dance + b.acting) / 3; return sa > sb ? a : b; });
-      return displayName(best) + (sel.length > 1 ? ' 等' + sel.length + '人出席，' : '') + '荣获年度大奖，公司声誉显著提升！';
-    }
-  },
-  {
     name:'影视剧拍摄', icon:'🎬', bg:'#fef2f2',
     desc:'接下影视剧主演邀约，演技高的艺人能赢得更好口碑',
     cost:60, minArtists:1, statHint:'演技', duration:3,
