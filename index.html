@@ -130,6 +130,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .section.dark-scene .tab.active{color:#fff;border-bottom-color:rgba(255,255,255,.8)}
 .section.dark-scene .tab-bar{border-bottom-color:rgba(255,255,255,.12)}
 .card,.metric-card,.build-card,.event-item,.tip-box{box-shadow:0 2px 16px rgba(0,0,0,.1)}
+.ach-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.ach-card{background:#fff;border:1px solid #e8e5de;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;transition:all .2s}
+.ach-card.unlocked{background:linear-gradient(135deg,#fffbeb,#fef3c7);border-color:#f59e0b}
+.ach-card.locked{opacity:.45;filter:grayscale(.4)}
+.ach-icon{font-size:26px;line-height:1}
+.ach-name{font-size:13px;font-weight:600;color:#1a1a1a}
+.ach-desc{font-size:11px;color:#666;line-height:1.5}
+.ach-cat{font-size:10px;padding:1px 7px;border-radius:99px;background:#f0ede6;color:#999;font-weight:500;align-self:flex-start}
+.ach-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;border:1px solid #f59e0b;border-radius:12px;padding:12px 20px;font-size:13px;font-weight:600;z-index:300;box-shadow:0 8px 32px rgba(245,158,11,.3);transition:transform .4s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;text-align:center}
+.ach-toast.show{transform:translateX(-50%) translateY(0)}
 @media(max-width:600px){
   .cards-grid{grid-template-columns:repeat(2,1fr)}
   .build-grid{grid-template-columns:repeat(2,1fr)}
@@ -161,6 +171,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <button class="nav-btn" id="nav-events" onclick="showSection('events')">🏆 活动赛事</button>
     <button class="nav-btn" id="nav-finance" onclick="showSection('finance')">📈 财务报表</button>
     <button class="nav-btn" id="nav-content" onclick="showSection('content')">🎵 内容发行</button>
+    <button class="nav-btn" id="nav-achievements" onclick="showSection('achievements')">🏆 成就</button>
     <div style="flex:1"></div>
     <div style="padding:10px 12px;font-size:11px;color:#999;border-top:1px solid #f0ede6">
       <div id="company-level" style="font-weight:600;color:#666">⭐ 初创公司</div>
@@ -266,6 +277,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       </div>
     </div>
 
+    <!-- 成就 -->
+    <div class="section" id="section-achievements">
+      <div class="section-title">成就</div>
+      <div id="ach-progress" style="font-size:13px;color:#999;margin-bottom:16px"></div>
+      <div id="ach-list"></div>
+    </div>
+
     <!-- 内容发行 -->
     <div class="section" id="section-content">
       <div class="section-title">内容发行</div>
@@ -340,6 +358,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <div id="direction-options"></div>
   </div>
 </div>
+
+<div class="ach-toast" id="ach-toast"></div>
 
 <!-- 活动艺人选择弹窗 -->
 <div class="modal-bg" id="modal-event">
@@ -499,6 +519,52 @@ const CONTENT_TITLES={
   mv:['破晓','奔跑','追梦','怒放','起飞'],
   doc:['追梦实录','幕后日记','成长记录','初心故事'],
 };
+
+const ACHIEVEMENTS=[
+  // 里程碑
+  {id:'first_debut',   name:'初露锋芒', icon:'🌟', cat:'里程碑', desc:'第一位练习生成功出道',
+   check(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中');}},
+  {id:'fame_80',       name:'新兴势力', icon:'📈', cat:'里程碑', desc:'公司声望达到80',
+   check(){return G.fame>=80;}},
+  {id:'fame_200',      name:'业界翘楚', icon:'🏅', cat:'里程碑', desc:'公司声望达到200',
+   check(){return G.fame>=200;}},
+  {id:'fame_500',      name:'娱乐帝国', icon:'👑', cat:'里程碑', desc:'声望达到500，成为顶级娱乐帝国',
+   check(){return G.fame>=500;}},
+  {id:'money_3000',    name:'财富自由', icon:'💰', cat:'里程碑', desc:'资金突破3000万',
+   check(){return G.money>=3000;}},
+  {id:'month_24',      name:'两年老板', icon:'📅', cat:'里程碑', desc:'经营公司满24个月',
+   check(){return G.month>24;}},
+  // 艺人
+  {id:'sign_first',    name:'伯乐',     icon:'🤝', cat:'艺人', desc:'签约第一位练习生',
+   check(){return G.artists.length>=1;}},
+  {id:'fans_100',      name:'百万宠儿', icon:'💫', cat:'艺人', desc:'任意艺人粉丝突破100万',
+   check(){return G.artists.some(a=>(a.fans||0)>=100);}},
+  {id:'fans_500',      name:'顶流诞生', icon:'🚀', cat:'艺人', desc:'任意艺人粉丝突破500万',
+   check(){return G.artists.some(a=>(a.fans||0)>=500);}},
+  {id:'all_debut',     name:'全员出道', icon:'🎤', cat:'艺人', desc:'旗下至少3名艺人全部出道',
+   check(){return G.artists.length>=3&&G.artists.every(a=>a.status==='已出道'||a.status==='工作中');}},
+  {id:'pr_recovery',   name:'浴火重生', icon:'🔥', cat:'艺人', desc:'艺人从舆论危机恢复至口碑爆棚',
+   check(){return G.artists.some(a=>a._hadCrisis&&(a.pr||60)>=80);}},
+  {id:'all_directions',name:'全能经纪人',icon:'🎭',cat:'艺人', desc:'旗下同时拥有歌手、演员、主持人、全能四种方向',
+   check(){const d=new Set(G.artists.filter(a=>a.direction).map(a=>a.direction));return['歌手','演员','主持人','全能'].every(x=>d.has(x));}},
+  // 建设
+  {id:'all_built',     name:'基础完备', icon:'🏗️', cat:'建设', desc:'所有设施完成建造',
+   check(){return Object.values(G.buildings).every(b=>b.lv>0);}},
+  {id:'max_building',  name:'精益求精', icon:'⬆️', cat:'建设', desc:'任意设施升至最高等级',
+   check(){return Object.values(G.buildings).some(b=>b.lv>=b.maxLv);}},
+  {id:'streaming_signed',name:'流媒体时代',icon:'📱',cat:'建设',desc:'签约流媒体平台合约',
+   check(){return G.streamingDeal===true;}},
+  // 内容
+  {id:'album_released',name:'唱片公司',  icon:'💿', cat:'内容', desc:'发行第一张实体专辑',
+   check(){return (G.releases||[]).some(r=>r.type==='album');}},
+  {id:'releases_10',   name:'内容工厂', icon:'🎬', cat:'内容', desc:'累计发行10部内容',
+   check(){return (G.releases||[]).length>=10;}},
+  // 活动
+  {id:'concert_done',  name:'演唱会初体验',icon:'🎪',cat:'活动',desc:'首次成功举办演唱会巡演',
+   check(){return (G.completedEventNames||[]).includes('演唱会巡演');}},
+  {id:'award_done',    name:'站上颁奖台',icon:'🏆', cat:'活动',desc:'首次参加颁奖典礼',
+   check(){return (G.completedEventNames||[]).includes('颁奖典礼');}},
+];
 
 let recruitPool=[], artistTabCur='roster';
 let currentEventIdx=-1, selectedEventArtists=[];
@@ -721,7 +787,7 @@ function renderScene(id){
   let bg=section.querySelector('.scene-bg');
   if(!bg){bg=document.createElement('div');bg.className='scene-bg';section.insertBefore(bg,section.firstChild);}
   section.classList.remove('dark-scene');
-  const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,events:sceneEvents,finance:sceneFinance,content:sceneContent};
+  const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,events:sceneEvents,finance:sceneFinance,content:sceneContent,achievements:sceneAchievements};
   if(fns[id]) bg.innerHTML=fns[id]();
   if(id==='artists'||id==='events') section.classList.add('dark-scene');
 }
@@ -900,7 +966,7 @@ function releaseContent(){
   const release={type:t.id,artistName:displayName(a),title,releasedAt:G.month,baseIncome:t.income(a),duration:t.duration};
   G.releases.push(release);
   addLog(title+' 制作费','minus',t.cost);
-  saveGame();renderContent();updateStats();
+  saveGame();renderContent();updateStats();checkAchievements();
   toast('🎉 「'+title+'」发行成功！','success');
 }
 
@@ -978,17 +1044,80 @@ function signStreaming(){
   G.money-=50;
   G.streamingDeal=true;
   addLog('签约流媒体平台','minus',50);
-  saveGame();renderContent();updateStats();
+  saveGame();renderContent();updateStats();checkAchievements();
   toast('📱 流媒体合约签署成功！单曲/专辑收益永久×1.5','success');
 }
 
 let contentArtistIdx=0, contentTypeId='single';
+
+function checkAchievements(){
+  let newUnlocks=[];
+  ACHIEVEMENTS.forEach(ach=>{
+    if(!(G.achievements||[]).includes(ach.id)&&ach.check()){
+      G.achievements.push(ach.id);
+      newUnlocks.push(ach);
+    }
+  });
+  if(newUnlocks.length){
+    saveGame();
+    if(document.getElementById('section-achievements').classList.contains('active')) renderAchievements();
+    newUnlocks.forEach((ach,i)=>setTimeout(()=>showAchToast(ach),i*1200));
+  }
+}
+
+function showAchToast(ach){
+  const el=document.getElementById('ach-toast');
+  el.innerHTML=`<div style="font-size:10px;opacity:.7;margin-bottom:3px;letter-spacing:.5px">🏆 成就解锁</div><div style="font-size:15px">${ach.icon} ${ach.name}</div><div style="font-size:11px;opacity:.7;margin-top:3px">${ach.desc}</div>`;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+function renderAchievements(){
+  const cats=['里程碑','艺人','建设','内容','活动'];
+  const unlocked=G.achievements||[];
+  const total=ACHIEVEMENTS.length;
+  document.getElementById('ach-progress').innerHTML=
+    `已解锁 <strong style="color:#1a1a1a">${unlocked.length}</strong> / ${total} &nbsp;·&nbsp; `+
+    `<span style="font-size:12px">${Math.round(unlocked.length/total*100)}% 完成度</span>`;
+  document.getElementById('ach-list').innerHTML=cats.map(cat=>{
+    const list=ACHIEVEMENTS.filter(a=>a.cat===cat);
+    return `<div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">${cat}</div>
+      <div class="ach-grid">
+        ${list.map(ach=>{
+          const done=unlocked.includes(ach.id);
+          return `<div class="ach-card ${done?'unlocked':'locked'}">
+            <div class="ach-icon">${ach.icon}</div>
+            <div class="ach-name">${ach.name}</div>
+            <div class="ach-desc">${ach.desc}</div>
+            ${done?'<div style="font-size:10px;color:#92400e;font-weight:600;margin-top:2px">✅ 已解锁</div>':''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sceneAchievements(){
+  const trophies=Array(12).fill(0).map((_,i)=>`<div style="position:absolute;left:${(i*23+5)%90}%;top:${(i*17+8)%55}%;font-size:${18+(i%3)*10}px;opacity:${.06+.04*(i%5)};transform:rotate(${-15+i*13}deg)">🏆</div>`).join('');
+  const stars=Array(20).fill(0).map((_,i)=>`<div style="position:absolute;left:${(i*31+7)%93}%;top:${(i*19+4)%65}%;font-size:${8+(i%3)*4}px;opacity:${.15+.06*(i%6)}">⭐</div>`).join('');
+  return `
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#fffbeb 0%,#fef3c7 55%,#fde68a 100%)"></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(245,158,11,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(245,158,11,.05) 1px,transparent 1px);background-size:30px 30px"></div>
+  ${trophies}${stars}
+  <div style="position:absolute;bottom:0;left:0;right:0;height:10%;background:rgba(245,158,11,.1)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b)"></div>`;
+}
 
 function init(){
   const hasSave=loadGame();
   if(!G.usedEvents) G.usedEvents=[];
   if(!G.usedEventArtists) G.usedEventArtists=[];
   if(!G.lastEvents) G.lastEvents=[];
+  if(!G.achievements) G.achievements=[];
+  if(!G.completedEventNames) G.completedEventNames=[];
+  G.artists.forEach(a=>{if(a._hadCrisis===undefined) a._hadCrisis=false;});
   if(!G.monthlyHistory) G.monthlyHistory=[];
   if(!G.releases) G.releases=[];
   if(G.streamingDeal===undefined) G.streamingDeal=false;
@@ -996,7 +1125,8 @@ function init(){
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   renderScene('overview');
-  if(hasSave) toast('读取存档成功，继续上次游戏','success');
+  if(hasSave){checkAchievements();toast('读取存档成功，继续上次游戏','success');}
+  else checkAchievements();
 }
 
 function showSection(id){
@@ -1007,6 +1137,7 @@ function showSection(id){
   renderScene(id);
   if(id==='finance') renderFinance();
   if(id==='content') renderContent();
+  if(id==='achievements') renderAchievements();
 }
 
 function switchTab(tab,el){
@@ -1165,7 +1296,7 @@ function upgradeBuilding(k){
   const paid=b.cost;
   G.money-=paid; b.lv++; b.cost=Math.round(b.cost*1.5);
   addLog((b.lv===1?'建造':'升级')+b.name,'minus',paid);
-  renderBuildings();updateStats();updateOverview();saveGame();
+  renderBuildings();updateStats();updateOverview();saveGame();checkAchievements();
   toast(b.name+(b.lv===1?' 建造完成！':' 升级至 Lv.'+b.lv+'！'),'success');
 }
 
@@ -1292,8 +1423,9 @@ function confirmEventWithArtists(){
   G.fame+=r.fame;
   addLog(ev.name+' 奖励','plus',r.money);
   const msg=ev.apply(sel,r);
+  if(!(G.completedEventNames||[]).includes(ev.name))(G.completedEventNames=G.completedEventNames||[]).push(ev.name);
   closeEventModal();
-  updateStats();updateOverview();updateTips();renderEvents();saveGame();
+  updateStats();updateOverview();updateTips();renderEvents();saveGame();checkAchievements();
   toast('🎉 '+ev.name+'成功！'+msg,'success');
 }
 
@@ -1332,7 +1464,7 @@ function recruit(i){
   G.money-=p.cost;
   G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:p.cost,pr:60});
   addLog('签约'+p.name,'minus',p.cost);
-  updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();maybeRefreshArtistScene();closeRecruit();
+  updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();checkAchievements();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
 }
 
@@ -1425,6 +1557,7 @@ function nextMonth(){
     if(a.status==='训练中') a.totalCost=(a.totalCost||0)+5;
     if(a.status==='休息中'){cost+=2;a.totalCost=(a.totalCost||0)+2;}
     const _pr=a.pr||60;
+    if(_pr<40) a._hadCrisis=true;
     if(_pr<60) a.pr=Math.min(60,_pr+2);
     if(_pr<40&&(a.fans||0)>0) a.fans=Math.max(0,Math.round((a.fans||0)*0.95));
   });
@@ -1434,7 +1567,7 @@ function nextMonth(){
   (G.monthlyHistory=G.monthlyHistory||[]).push({month:G.month,income,cost});
   if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
   G.lastEvents=triggerMonthlyEvents();
-  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();
+  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();checkAchievements();
   const evMsg=G.lastEvents.length?' · '+G.lastEvents.length+'件事件':'';
   toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
 }
