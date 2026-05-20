@@ -179,6 +179,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
         <div class="metric-card"><div class="metric-label">公司声望</div><div class="metric-val" id="ov-fame">12</div><div class="metric-sub">点</div></div>
       </div>
       <div class="tip-box" id="monthly-tips">💡 欢迎来到我的娱乐公司！建议先建造直播基地获取稳定收入，再招募练习生开始培养艺人之路！</div>
+      <div class="card" id="events-card" style="display:none">
+        <div class="card-head"><span class="card-title">📌 本月事件</span></div>
+        <div id="monthly-events-list"></div>
+      </div>
       <div class="card">
         <div class="card-head"><span class="card-title">设施状态</span></div>
         <div id="facility-status"></div>
@@ -296,7 +300,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 <script>
 const G = {
   money: 1000, fame: 12, month: 1,
-  artists: [], log: [], usedEvents: [],
+  artists: [], log: [], usedEvents: [], lastEvents: [],
   monthlyIncome: 0, monthlyCost: 0,
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
@@ -336,6 +340,78 @@ const DIRECTIONS=[
   {id:'主持人', icon:'📺', color:'#fff8e1', tc:'#92400e', desc:'综艺节目常驻，每月额外+2声望'},
   {id:'全能', icon:'⭐', color:'#fce7f3', tc:'#831843', desc:'均衡发展，综合演出收入+10%'},
 ];
+
+const MONTHLY_EVENTS={
+  industry:[
+    {name:'年末颁奖季来临',icon:'🏆',type:'good',desc:'全行业热度上升，声望与收益同步提升',
+     effect(){G.fame+=15;G.money+=30;addLog('颁奖季热度奖励','plus',30);}},
+    {name:'流媒体平台提升版权分成',icon:'📱',type:'good',desc:'内容平台调整政策，本月多获一笔分成',
+     effect(){const b=Math.max(20,G.artists.filter(a=>a.status==='工作中'||a.status==='已出道').length*15);G.money+=b;addLog('平台分成额外奖励','plus',b);}},
+    {name:'权威媒体正面报道',icon:'📰',type:'good',desc:'行业形象提升，公司声望大幅增加',
+     effect(){G.fame+=22;}},
+    {name:'资本看好文娱赛道',icon:'💼',type:'good',desc:'市场信心回升，临时获得合作投资',
+     check(){return G.fame>=30;},
+     effect(){G.money+=100;addLog('行业投资红利','plus',100);}},
+    {name:'监管部门出台整改通知',icon:'📋',type:'bad',desc:'合规整改产生额外支出',
+     effect(){G.money=Math.max(0,G.money-30);addLog('合规整改费用','minus',30);}},
+    {name:'广告市场整体下行',icon:'📉',type:'bad',desc:'演出报价普遍走低，收入受损',
+     effect(){const p=Math.max(10,Math.round(G.monthlyIncome*0.15));G.money=Math.max(0,G.money-p);addLog('广告市场下行损失','minus',p);}},
+    {name:'行业丑闻引发信任危机',icon:'😰',type:'bad',desc:'整体舆论环境变差，声望受损',
+     effect(){G.fame=Math.max(0,G.fame-12);}},
+  ],
+  company:[
+    {name:'知名制作人寻求合作',icon:'🎼',type:'good',desc:'训练中的艺人本月属性额外提升',
+     check(){return G.artists.some(a=>a.status==='训练中');},
+     effect(){G.artists.filter(a=>a.status==='训练中').forEach(a=>{a.singing=Math.min(99,a.singing+5);a.dance=Math.min(99,a.dance+5);});}},
+    {name:'商务合作签约',icon:'🤝',type:'good',desc:'一笔商务合作带来额外收入',
+     effect(){G.money+=50;addLog('商务合作收入','plus',50);}},
+    {name:'热门综艺节目邀约',icon:'📺',type:'good',desc:'节目方支付合作费，声望同步提升',
+     check(){return G.artists.length>0;},
+     effect(){G.money+=60;G.fame+=18;addLog('综艺合作费','plus',60);}},
+    {name:'设施设备故障',icon:'🔧',type:'bad',desc:'维修费用支出，影响正常运营',
+     check(){return Object.values(G.buildings).some(b=>b.lv>0);},
+     effect(){
+       const built=Object.entries(G.buildings).filter(([k,b])=>b.lv>0);
+       const [key,b]=built[Math.floor(Math.random()*built.length)];
+       G.money=Math.max(0,G.money-40);addLog(b.name+' 维修费','minus',40);
+       return b.name+'出现故障，花费40万维修';
+     }},
+    {name:'竞争对手恶意施压',icon:'😤',type:'bad',desc:'舆论冲击导致部分粉丝流失',
+     check(){return G.artists.some(a=>(a.fans||0)>3);},
+     effect(){
+       const pool=G.artists.filter(a=>(a.fans||0)>3);
+       const a=pool[Math.floor(Math.random()*pool.length)];
+       const loss=Math.round((a.fans||0)*0.1);
+       a.fans=Math.max(0,(a.fans||0)-loss);
+       return displayName(a)+'受到舆论冲击，流失'+loss+'万粉丝';
+     }},
+    {name:'财务审计发现漏洞',icon:'🧾',type:'bad',desc:'需补缴税款及滞纳金',
+     effect(){const p=Math.max(15,Math.round(G.money*0.03));G.money=Math.max(0,G.money-p);addLog('税务补缴','minus',p);}},
+  ],
+  artist:[
+    {name:'意外爆红',icon:'🚀',type:'good',desc:'短视频爆款带动粉丝量暴增',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){a.fans=Math.round((a.fans||0)*1.6+15);G.fame+=8;}},
+    {name:'天赋觉醒',icon:'✨',type:'good',desc:'训练中突然开窍，唱跳属性大幅提升',
+     check(a){return a.status==='训练中';},
+     effect(a){a.singing=Math.min(99,a.singing+8);a.dance=Math.min(99,a.dance+8);}},
+    {name:'品牌临时邀约',icon:'💝',type:'good',desc:'品牌方主动找上门，获得一笔代言收入',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){const b=Math.round(25+Math.random()*35);G.money+=b;addLog(displayName(a)+' 临时代言','plus',b);}},
+    {name:'获年度新人提名',icon:'🏅',type:'good',desc:'行业认可度提升，粉丝量同步增长',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){G.fame+=18;a.fans=Math.round((a.fans||0)*1.2+10);}},
+    {name:'私生活遭曝光',icon:'📸',type:'bad',desc:'舆论发酵，粉丝流失，公司声望受损',
+     check(a){return (a.fans||0)>5&&(a.status==='已出道'||a.status==='工作中');},
+     effect(a){const l=Math.round((a.fans||0)*0.22);a.fans=Math.max(0,(a.fans||0)-l);G.fame=Math.max(0,G.fame-10);}},
+    {name:'情绪低落申请休整',icon:'😔',type:'bad',desc:'状态切换为休息中，本月停止接活',
+     check(a){return a.status==='工作中';},
+     effect(a){a.status='休息中';}},
+    {name:'训练中轻伤',icon:'🩹',type:'bad',desc:'需要短暂休养，暂停训练',
+     check(a){return a.status==='训练中';},
+     effect(a){a.status='休息中';}},
+  ]
+};
 
 function displayName(a){return a.alias||a.name;}
 function dirClass(d){return {'歌手':'singer','演员':'actor','主持人':'host','全能':'allround'}[d]||'';}
@@ -572,6 +648,7 @@ function sceneFinance(){
 function init(){
   const hasSave=loadGame();
   if(!G.usedEvents) G.usedEvents=[];
+  if(!G.lastEvents) G.lastEvents=[];
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   renderScene('overview');
@@ -757,6 +834,53 @@ function recruit(i){
   toast('成功签约 '+p.name+'！','success');
 }
 
+function triggerMonthlyEvents(){
+  const results=[];
+  if(G.month%3===0){
+    const pool=MONTHLY_EVENTS.industry.filter(e=>!e.check||e.check());
+    if(pool.length){
+      const ev=pool[Math.floor(Math.random()*pool.length)];
+      const extra=ev.effect();
+      results.push({name:ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+    }
+  }
+  if(Math.random()<0.15){
+    const pool=MONTHLY_EVENTS.company.filter(e=>!e.check||e.check());
+    if(pool.length){
+      const ev=pool[Math.floor(Math.random()*pool.length)];
+      const extra=ev.effect();
+      results.push({name:ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+    }
+  }
+  G.artists.forEach(a=>{
+    if(Math.random()<0.10){
+      const pool=MONTHLY_EVENTS.artist.filter(e=>!e.check||e.check(a));
+      if(pool.length){
+        const ev=pool[Math.floor(Math.random()*pool.length)];
+        const extra=ev.effect(a);
+        results.push({name:displayName(a)+' · '+ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+      }
+    }
+  });
+  return results;
+}
+
+function renderLastEvents(){
+  const card=document.getElementById('events-card');
+  const el=document.getElementById('monthly-events-list');
+  if(!G.lastEvents||!G.lastEvents.length){card.style.display='none';return;}
+  card.style.display='';
+  el.innerHTML=G.lastEvents.map((ev,i)=>`
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;${i<G.lastEvents.length-1?'border-bottom:1px solid #f0ede6':''}">
+      <span style="font-size:20px;flex-shrink:0;line-height:1.3">${ev.icon}</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:${ev.type==='good'?'#2e7d32':'#c62828'}">${ev.name}</div>
+        <div style="font-size:12px;color:#666;margin-top:2px">${ev.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
 function nextMonth(){
   G.month++;
   G.usedEvents=[];
@@ -788,8 +912,10 @@ function nextMonth(){
   G.money+=income-cost;
   G.monthlyIncome=income; G.monthlyCost=cost;
   G.fame+=Math.floor(income/25+1);
+  G.lastEvents=triggerMonthlyEvents();
   updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();
-  toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万','success');
+  const evMsg=G.lastEvents.length?' · '+G.lastEvents.length+'件事件':'';
+  toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
 }
 
 function updateStats(){
@@ -818,6 +944,7 @@ function updateOverview(){
     </div>
   `).join('');
   updateTips();
+  renderLastEvents();
 }
 
 function updateTips(){
