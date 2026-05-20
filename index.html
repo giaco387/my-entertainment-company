@@ -195,6 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       <div class="tab-bar">
         <button class="tab active" onclick="switchTab('roster',this)">花名册</button>
         <button class="tab" onclick="switchTab('train',this)">训练安排</button>
+        <button class="tab" onclick="switchTab('pr',this)">📢 公关管理</button>
       </div>
       <div id="tab-roster">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -209,6 +210,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
         <div class="card">
           <div class="card-head"><span class="card-title">安排艺人状态</span></div>
           <div id="train-list" style="color:#999;font-size:13px">暂无艺人</div>
+        </div>
+      </div>
+      <div id="tab-pr" style="display:none">
+        <div class="tip-box" style="margin-bottom:12px;font-size:12px">
+          💡 舆论值影响演出收益：<span style="color:#2e7d32;font-weight:600">口碑爆棚(80+)×1.3</span> / 正常(60-79)×1.0 / <span style="color:#e65100;font-weight:600">风波中(40-59)×0.7</span> / <span style="color:#c62828;font-weight:600">危机(&lt;40)×0.3且掉粉</span>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">艺人公关管理</span></div>
+          <div id="pr-list" style="color:#999;font-size:13px">暂无艺人</div>
         </div>
       </div>
     </div>
@@ -406,7 +416,7 @@ const MONTHLY_EVENTS={
   artist:[
     {name:'意外爆红',icon:'🚀',type:'good',desc:'短视频爆款带动粉丝量暴增',
      check(a){return a.status==='已出道'||a.status==='工作中';},
-     effect(a){a.fans=Math.round((a.fans||0)*1.6+15);G.fame+=8;}},
+     effect(a){a.fans=Math.round((a.fans||0)*1.6+15);G.fame+=8;a.pr=Math.min(100,(a.pr||60)+20);}},
     {name:'天赋觉醒',icon:'✨',type:'good',desc:'训练中突然开窍，唱跳属性大幅提升',
      check(a){return a.status==='训练中';},
      effect(a){a.singing=Math.min(99,a.singing+8);a.dance=Math.min(99,a.dance+8);}},
@@ -415,20 +425,34 @@ const MONTHLY_EVENTS={
      effect(a){const b=Math.round(25+Math.random()*35);G.money+=b;addLog(displayName(a)+' 临时代言','plus',b);}},
     {name:'获年度新人提名',icon:'🏅',type:'good',desc:'行业认可度提升，粉丝量同步增长',
      check(a){return a.status==='已出道'||a.status==='工作中';},
-     effect(a){G.fame+=18;a.fans=Math.round((a.fans||0)*1.2+10);}},
+     effect(a){G.fame+=18;a.fans=Math.round((a.fans||0)*1.2+10);a.pr=Math.min(100,(a.pr||60)+15);}},
     {name:'私生活遭曝光',icon:'📸',type:'bad',desc:'舆论发酵，粉丝流失，公司声望受损',
      check(a){return (a.fans||0)>5&&(a.status==='已出道'||a.status==='工作中');},
-     effect(a){const l=Math.round((a.fans||0)*0.22);a.fans=Math.max(0,(a.fans||0)-l);G.fame=Math.max(0,G.fame-10);}},
+     effect(a){const l=Math.round((a.fans||0)*0.22);a.fans=Math.max(0,(a.fans||0)-l);G.fame=Math.max(0,G.fame-10);a.pr=Math.max(0,(a.pr||60)-30);}},
     {name:'情绪低落申请休整',icon:'😔',type:'bad',desc:'状态切换为休息中，本月停止接活',
      check(a){return a.status==='工作中';},
      effect(a){a.status='休息中';}},
     {name:'训练中轻伤',icon:'🩹',type:'bad',desc:'需要短暂休养，暂停训练',
      check(a){return a.status==='训练中';},
      effect(a){a.status='休息中';}},
+    {name:'被偷拍同框',icon:'🕵️',type:'bad',desc:'被媒体拍到与神秘人同框，热搜发酵',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){a.pr=Math.max(0,(a.pr||60)-25);a.fans=Math.max(0,Math.round((a.fans||0)*0.9));}},
+    {name:'旧言论被翻出',icon:'🔍',type:'bad',desc:'早年不当言论重新流传，舆论震荡',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){a.pr=Math.max(0,(a.pr||60)-30);G.fame=Math.max(0,G.fame-8);}},
+    {name:'正能量行为被曝光',icon:'🌟',type:'good',desc:'助人善举被路人拍下传播，口碑大涨',
+     effect(a){a.pr=Math.min(100,(a.pr||60)+20);G.fame+=15;}},
+    {name:'综艺名场面爆梗',icon:'😂',type:'good',desc:'综艺片段二次传播，带来大量新粉',
+     check(a){return a.status==='已出道'||a.status==='工作中';},
+     effect(a){a.fans=Math.round((a.fans||0)*1.3+8);a.pr=Math.min(100,(a.pr||60)+10);}},
   ]
 };
 
 function displayName(a){return a.alias||a.name;}
+function prBg(pr){return pr>=80?'#e8f5e9':pr>=60?'#e3f2fd':pr>=40?'#fff3e0':'#ffebee';}
+function prColor(pr){return pr>=80?'#2e7d32':pr>=60?'#1565c0':pr>=40?'#e65100':'#c62828';}
+function prLabel(pr){return pr>=80?'口碑爆棚':pr>=60?'舆论正常':pr>=40?'风波中':'舆论危机';}
 function dirClass(d){return {'歌手':'singer','演员':'actor','主持人':'host','全能':'allround'}[d]||'';}
 function dirIcon(d){return {'歌手':'🎤','演员':'🎭','主持人':'📺','全能':'⭐'}[d]||'';}
 
@@ -665,6 +689,7 @@ function init(){
   if(!G.usedEvents) G.usedEvents=[];
   if(!G.lastEvents) G.lastEvents=[];
   if(!G.monthlyHistory) G.monthlyHistory=[];
+  G.artists.forEach(a=>{if(a.pr===undefined) a.pr=60;});
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   renderScene('overview');
@@ -686,7 +711,9 @@ function switchTab(tab,el){
   el.classList.add('active');
   document.getElementById('tab-roster').style.display=tab==='roster'?'':'none';
   document.getElementById('tab-train').style.display=tab==='train'?'':'none';
+  document.getElementById('tab-pr').style.display=tab==='pr'?'':'none';
   if(tab==='train') renderTrainList();
+  if(tab==='pr') renderPrTab();
 }
 
 function renderArtistList(){
@@ -709,6 +736,7 @@ function renderArtistList(){
           <span class="status-badge ${statusCls(a.status)}">${a.status}</span>
           ${a.direction?`<span class="direction-badge dir-${dirClass(a.direction)}">${dirIcon(a.direction)} ${a.direction}</span>`:''}
           ${a.status==='已出道'?`<button class="btn btn-sm" style="font-size:10px;padding:2px 7px;height:auto;line-height:1.6" onclick="openDirectionSelect(${i})">${a.direction?'换方向':'选方向'}</button>`:''}
+          <span class="tag" style="background:${prBg(a.pr||60)};color:${prColor(a.pr||60)}">舆 ${a.pr||60}</span>
         </div>
       </div>
       <div style="flex:1;max-width:130px">
@@ -734,6 +762,66 @@ function renderTrainList(){
       </div>
     </div>
   `).join('');
+}
+
+function renderPrTab(){
+  const el=document.getElementById('pr-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>{
+    const pr=a.pr||60;
+    const canFanmeet=G.buildings.fanshall.lv>0;
+    return `<div class="artist-row" style="align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${displayName(a)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <div style="flex:1;height:7px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:120px">
+            <div style="height:100%;border-radius:99px;background:${prColor(pr)};width:${pr}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:${prColor(pr)}">${pr}</span>
+        </div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:${prBg(pr)};color:${prColor(pr)};font-weight:600">${prLabel(pr)}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+        <button class="btn btn-sm" onclick="doPrAction(${i},'clarify')" ${pr>=60?'disabled':''} title="舆论低于60时有效">澄清声明 <strong>5万</strong></button>
+        <button class="btn btn-sm btn-primary" onclick="doPrAction(${i},'news')">策划正面新闻 <strong>20万</strong></button>
+        <button class="btn btn-sm btn-success" onclick="doPrAction(${i},'fanmeet')" ${!canFanmeet?'disabled':''} title="${canFanmeet?'':'需先建造粉丝见面厅'}">粉丝见面会 <strong>30万</strong></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function doPrAction(i,action){
+  const a=G.artists[i];
+  const pr=a.pr||60;
+  if(action==='clarify'){
+    if(pr>=60){toast('当前舆论正常，无需澄清','error');return;}
+    if(G.money<5){toast('资金不足 5万','error');return;}
+    G.money-=5; a.pr=Math.min(100,pr+15);
+    addLog('为'+displayName(a)+'发表澄清声明','minus',5);
+    toast(displayName(a)+' 舆论 +15，现为 '+a.pr,'success');
+  } else if(action==='news'){
+    if(G.money<20){toast('资金不足 20万','error');return;}
+    G.money-=20;
+    addLog('为'+displayName(a)+'策划正面新闻','minus',20);
+    if(Math.random()<0.3){
+      a.pr=Math.max(0,pr-10);
+      toast('操作被识破！'+displayName(a)+' 舆论 -10，现为 '+a.pr,'error');
+    } else {
+      a.pr=Math.min(100,pr+30);
+      toast(displayName(a)+' 正面新闻奏效，舆论 +30，现为 '+a.pr,'success');
+    }
+  } else if(action==='fanmeet'){
+    if(G.buildings.fanshall.lv===0){toast('需先建造粉丝见面厅','error');return;}
+    if(G.money<30){toast('资金不足 30万','error');return;}
+    G.money-=30;
+    a.pr=Math.min(100,pr+25);
+    a.fans=Math.round((a.fans||0)*1.15+5);
+    addLog('为'+displayName(a)+'举办粉丝见面会','minus',30);
+    toast(displayName(a)+' 见面会圆满！舆论 +25，粉丝 +15%','success');
+    renderArtistList();
+  }
+  saveGame(); renderPrTab(); updateStats();
 }
 
 function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'status-debut':s==='工作中'?'status-working':'status-idle';}
@@ -844,7 +932,7 @@ function recruit(i){
   const p=recruitPool[i];
   if(G.money<p.cost){toast('资金不足 '+p.cost+' 万！','error');return;}
   G.money-=p.cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:p.cost});
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:p.cost,pr:60});
   addLog('签约'+p.name,'minus',p.cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
@@ -914,11 +1002,13 @@ function nextMonth(){
     }
     if(a.status==='工作中'||a.status==='已出道'){
       const mvBonus=lv.mv.lv>0?1.3:1;
+      const pr=a.pr||60;
+      const prMult=pr>=80?1.3:pr>=60?1.0:pr>=40?0.7:0.3;
       let base=(a.singing+a.dance)/12+Math.random()*8;
       if(a.direction==='歌手'&&a.singing>=70) base*=1.25;
       else if(a.direction==='演员'&&a.acting>=70) base*=1.25;
       else if(a.direction==='全能') base*=1.1;
-      const g=Math.round(base*mvBonus);
+      const g=Math.round(base*mvBonus*prMult);
       income+=g; a.fans=Math.round((a.fans||0)+g/8);
       a.totalIncome=(a.totalIncome||0)+g;
       if(a.direction==='主持人') G.fame+=2;
@@ -926,6 +1016,9 @@ function nextMonth(){
     }
     if(a.status==='训练中') a.totalCost=(a.totalCost||0)+5;
     if(a.status==='休息中'){cost+=2;a.totalCost=(a.totalCost||0)+2;}
+    const _pr=a.pr||60;
+    if(_pr<60) a.pr=Math.min(60,_pr+2);
+    if(_pr<40&&(a.fans||0)>0) a.fans=Math.max(0,Math.round((a.fans||0)*0.95));
   });
   G.money+=income-cost;
   G.monthlyIncome=income; G.monthlyCost=cost;
