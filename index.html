@@ -1471,7 +1471,7 @@ function getBuildingContrib(k,b){
   }
   if(k==='media')  return `负面事件概率 -${b.lv*8}%，PR效果增强`;
   if(k==='health') return `防意外停工 · 休息艺人每月舆论恢复+3`;
-  if(k==='legal')  return `合同续签费 -${b.lv*10}%`;
+  if(k==='legal')  return `合同续签费 -${b.lv*10}% · 发声明舆论 +${15+b.lv*5}`;
   return null;
 }
 
@@ -1486,7 +1486,7 @@ function getBuildingActionCfg(k){
     merch:    {label:'限定周边', cost:30,  desc:'出道艺人粉丝×1.12，套现周边收益'},
     media:    {label:'公关攻势', cost:25,  desc:'全员舆论+12，移除最差负面趋势'},
     health:   {label:'紧急复健', cost:20,  desc:'粉丝最多的休息艺人立即恢复工作'},
-    legal:    {label:'合同谈判', cost:15,  desc:'最快到期合同自动延长12个月'},
+    legal:    {label:'发声明',   cost:20,  desc:'为舆论最差艺人发布官方声明，消除负面影响'},
   }[k];
 }
 
@@ -1503,7 +1503,7 @@ function doFacilityAction(k){
   if(k==='mv'&&!G.releases?.length){toast('当前没有上线的内容','error');return;}
   if(k==='merch'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
   if(k==='health'&&!G.artists.some(a=>a.status==='休息中')){toast('当前没有休息中的艺人','error');return;}
-  if(k==='legal'&&!G.artists.length){toast('暂无签约艺人','error');return;}
+  if(k==='legal'&&!G.artists.some(a=>(a.pr||60)<90)){toast('当前没有艺人需要公关危机处理','error');return;}
   if(G.money<cfg.cost){toast('资金不足 '+cfg.cost+' 万','error');return;}
   if(cfg.cost>0){G.money-=cfg.cost;addLog(b.name+'·'+cfg.label,'minus',cfg.cost);}
   if(!G.buildingActions) G.buildingActions={};
@@ -1556,14 +1556,14 @@ function doFacilityAction(k){
     target.status='工作中';
     result=displayName(target)+' 复健完毕，已恢复工作状态';
   } else if(k==='legal'){
-    const target=[...G.artists].filter(a=>a.contractEnd>G.month).sort((a,b)=>(a.contractEnd||0)-(b.contractEnd||0))[0]
-      || G.artists[0];
-    if(!target){toast('暂无可处理的合同','error');G.buildingActions[k]=0;G.money+=cfg.cost;return;}
-    target.contractEnd=(target.contractEnd||G.month)+12;
-    result=displayName(target)+' 合同延长12个月';
+    const target=[...G.artists].sort((a,b)=>(a.pr||60)-(b.pr||60))[0];
+    const boost=15+(G.buildings.legal?.lv||1)*5;
+    const before=target.pr||60;
+    target.pr=Math.min(100,before+boost);
+    result=displayName(target)+` 发布官方声明，舆论 ${before}→${target.pr}`;
   }
   saveGame();renderBuildings();updateStats();updateOverview();
-  if(k==='practice'||k==='fanshall'||k==='merch'||k==='media'||k==='health') renderArtistList();
+  if(k==='practice'||k==='fanshall'||k==='merch'||k==='media'||k==='health'||k==='legal') renderArtistList();
   toast('✨ '+cfg.label+'：'+result,'success');
 }
 
