@@ -160,6 +160,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <button class="nav-btn" id="nav-buildings" onclick="showSection('buildings')">🏢 设施建设</button>
     <button class="nav-btn" id="nav-events" onclick="showSection('events')">🏆 活动赛事</button>
     <button class="nav-btn" id="nav-finance" onclick="showSection('finance')">📈 财务报表</button>
+    <button class="nav-btn" id="nav-content" onclick="showSection('content')">🎵 内容发行</button>
     <div style="flex:1"></div>
     <div style="padding:10px 12px;font-size:11px;color:#999;border-top:1px solid #f0ede6">
       <div id="company-level" style="font-weight:600;color:#666">⭐ 初创公司</div>
@@ -265,6 +266,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       </div>
     </div>
 
+    <!-- 内容发行 -->
+    <div class="section" id="section-content">
+      <div class="section-title">内容发行</div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head">
+          <span class="card-title">🎬 发行新内容</span>
+          <span style="font-size:12px;color:#999">选择艺人和内容类型后点击发行</span>
+        </div>
+        <div id="release-creator"><div style="font-size:13px;color:#999">请先签约艺人</div></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">🔥 活跃作品</span><span id="release-count-badge" style="font-size:11px;color:#999"></span></div>
+        <div id="active-releases"><div style="font-size:13px;color:#999">还没有发行任何内容</div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">📱 流媒体平台合约</span></div>
+        <div id="streaming-info"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -325,7 +346,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 <script>
 const G = {
   money: 1000, fame: 12, month: 1,
-  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [],
+  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false,
   monthlyIncome: 0, monthlyCost: 0,
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
@@ -355,6 +376,27 @@ const EVENTS = [
   {name:'演唱会巡演',icon:'🎪',bg:'#fdf4ff',desc:'举办小型演唱会，收获大量粉丝和资金',req:'需艺人 ≥2 且声望 ≥80',cost:50,fameGain:80,moneyGain:300,check:()=>G.artists.length>=2&&G.fame>=80},
   {name:'颁奖典礼',icon:'🏆',bg:'#fff7ed',desc:'参加年度娱乐颁奖典礼，赢取大奖',req:'需声望 ≥150',cost:20,fameGain:200,moneyGain:100,check:()=>G.fame>=150},
 ];
+
+const CONTENT_TYPES=[
+  {id:'single',name:'数字单曲',icon:'🎵',cost:20,duration:2,
+   check(){return G.buildings.studio.lv>=1;},req:'录音室 Lv.1+',
+   income(a){return Math.round(8+(a.fans||0)*0.2+(a.singing||0)*0.1);}},
+  {id:'album',name:'实体专辑',icon:'💿',cost:80,duration:4,
+   check(){return G.buildings.studio.lv>=3;},req:'录音室 Lv.3+',
+   income(a){return Math.round(20+(a.fans||0)*0.6+(a.singing||0)*0.25);}},
+  {id:'mv',name:'MV',icon:'🎬',cost:50,duration:3,
+   check(){return G.buildings.mv.lv>=1;},req:'MV拍摄间 Lv.1+',
+   income(a){return Math.round(10+(a.fans||0)*0.35+((a.singing||0)+(a.dance||0))*0.06);}},
+  {id:'doc',name:'纪录片',icon:'📹',cost:40,duration:2,
+   check(){return Object.values(G.buildings).some(b=>b.lv>=2);},req:'任意设施 Lv.2+',
+   income(a){return Math.round(3+(a.fans||0)*0.08);}},
+];
+const CONTENT_TITLES={
+  single:['星光之下','初吻','告白','心动瞬间','约定','夜色','迷途','流星雨','温柔','秘密'],
+  album:['新世界','光年旅途','序章','盛夏余光','归途','印记','蜕变','初心'],
+  mv:['破晓','奔跑','追梦','怒放','起飞'],
+  doc:['追梦实录','幕后日记','成长记录','初心故事'],
+};
 
 let recruitPool=[], artistTabCur='roster';
 let currentAliasIdx=-1, currentDirIdx=-1;
@@ -576,7 +618,7 @@ function renderScene(id){
   let bg=section.querySelector('.scene-bg');
   if(!bg){bg=document.createElement('div');bg.className='scene-bg';section.insertBefore(bg,section.firstChild);}
   section.classList.remove('dark-scene');
-  const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,events:sceneEvents,finance:sceneFinance};
+  const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,events:sceneEvents,finance:sceneFinance,content:sceneContent};
   if(fns[id]) bg.innerHTML=fns[id]();
   if(id==='artists'||id==='events') section.classList.add('dark-scene');
 }
@@ -684,11 +726,168 @@ function sceneFinance(){
   <div style="position:absolute;bottom:0;left:0;right:0;height:11%;background:rgba(52,211,153,.18)"></div>`;
 }
 
+function sceneContent(){
+  const notes=['🎵','🎶','🎼','🎹','🎸','🎷','🎺'];
+  const floats=Array(14).fill(0).map((_,i)=>`<div style="position:absolute;left:${(i*17+5)%92}%;top:${(i*13+8)%60}%;font-size:${16+(i%3)*8}px;opacity:${.12+.06*(i%5)};transform:rotate(${-20+i*11}deg)">${notes[i%notes.length]}</div>`).join('');
+  return `
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#fdf4ff 0%,#f0e6ff 55%,#e9d5ff 100%)"></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(139,92,246,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,246,.05) 1px,transparent 1px);background-size:32px 32px"></div>
+  ${floats}
+  <div style="position:absolute;bottom:18%;left:50%;transform:translateX(-50%);font-size:64px;opacity:.09">🎬</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:10%;background:rgba(139,92,246,.12)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#8b5cf6,#a78bfa,#c4b5fd,#a78bfa,#8b5cf6)"></div>`;
+}
+
+function renderContent(){
+  renderReleaseCreator();
+  renderActiveReleases();
+  renderStreamingInfo();
+}
+
+function renderReleaseCreator(){
+  const el=document.getElementById('release-creator');
+  if(!G.artists.length){el.innerHTML='<div style="font-size:13px;color:#999">请先在「艺人管理」签约练习生</div>';return;}
+  const debutedArtists=G.artists.filter(a=>a.status==='已出道'||a.status==='工作中');
+  el.innerHTML=`
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">选择艺人</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="rc-artists">
+        ${G.artists.map((a,i)=>`<button onclick="selectReleaseArtist(${i})" id="rca-${i}" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;${contentArtistIdx===i?'background:#1a1a1a;color:#fff;border-color:#1a1a1a':''}">
+          <span style="width:22px;height:22px;border-radius:50%;background:${a.color};color:${a.tc};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${a.abbr}</span>
+          ${displayName(a)}
+        </button>`).join('')}
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">内容类型</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="rc-types">
+        ${CONTENT_TYPES.map(t=>`<button onclick="selectReleaseType('${t.id}')" id="rct-${t.id}" class="btn" style="flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;${contentTypeId===t.id?'background:#f0ede6;border-color:#1a1a1a;':''}${!t.check()?'opacity:.4;':''}">
+          <div style="font-size:15px">${t.icon} <strong style="font-size:13px">${t.name}</strong> <span style="font-size:11px;color:#999;font-weight:400">${t.cost}万</span></div>
+          <div style="font-size:10px;color:#999">${t.req} · 热度${t.duration}个月</div>
+          <div style="font-size:10px;color:#2e7d32">预估首月收益 ~${Math.round(t.income(G.artists[contentArtistIdx]||G.artists[0])*1.5)}万</div>
+        </button>`).join('')}
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="releaseContent()" style="width:100%;justify-content:center;padding:10px">
+      🚀 确认发行
+    </button>`;
+}
+
+function selectReleaseArtist(i){
+  contentArtistIdx=i;
+  renderReleaseCreator();
+}
+function selectReleaseType(id){
+  contentTypeId=id;
+  renderReleaseCreator();
+}
+
+function releaseContent(){
+  if(!G.artists.length){toast('请先签约艺人','error');return;}
+  const a=G.artists[contentArtistIdx];
+  if(!a){toast('请选择艺人','error');return;}
+  const t=CONTENT_TYPES.find(x=>x.id===contentTypeId);
+  if(!t){toast('请选择内容类型','error');return;}
+  if(!t.check()){toast('设施条件不满足：'+t.req,'error');return;}
+  if(G.money<t.cost){toast('资金不足 '+t.cost+' 万','error');return;}
+  const titleList=CONTENT_TITLES[t.id];
+  const rawTitle=titleList[Math.floor(Math.random()*titleList.length)];
+  const title=displayName(a)+' - '+rawTitle;
+  G.money-=t.cost;
+  const release={type:t.id,artistName:displayName(a),title,releasedAt:G.month,baseIncome:t.income(a),duration:t.duration};
+  G.releases.push(release);
+  addLog(title+' 制作费','minus',t.cost);
+  saveGame();renderContent();updateStats();
+  toast('🎉 「'+title+'」发行成功！','success');
+}
+
+function renderActiveReleases(){
+  const el=document.getElementById('active-releases');
+  const badge=document.getElementById('release-count-badge');
+  if(!G.releases||!G.releases.length){
+    el.innerHTML='<div style="font-size:13px;color:#999">还没有发行任何内容</div>';
+    if(badge) badge.textContent='';
+    return;
+  }
+  const sorted=[...G.releases].sort((a,b)=>b.releasedAt-a.releasedAt);
+  if(badge) badge.textContent=sorted.length+'部作品';
+  el.innerHTML=sorted.map((r,i)=>{
+    const age=G.month-r.releasedAt;
+    const isActive=r.type==='doc'?age<r.duration:true;
+    const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+    const streamBonus=G.streamingDeal&&(r.type==='single'||r.type==='album')?1.5:1;
+    const thisMonthIncome=Math.round(r.baseIncome*mult*streamBonus);
+    const heatPct=r.type==='doc'?Math.max(0,Math.round((1-age/r.duration)*100)):Math.max(5,Math.round((1-age/4)*100));
+    const heatColor=heatPct>60?'#16a34a':heatPct>30?'#e65100':'#dc2626';
+    const typeIcon=CONTENT_TYPES.find(t=>t.id===r.type)?.icon||'🎵';
+    const phaseLabel=age===0?'🔥 新鲜发布':age<=1?'📈 上升期':age<=2?'➡️ 平稳期':age<=3?'📉 长尾期':'💤 长尾';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i<sorted.length-1?'border-bottom:1px solid #f0ede6':''}">
+      <div style="width:42px;height:42px;border-radius:10px;background:#f0e6ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${typeIcon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+          <span style="font-size:10px;color:#999">第${age+1}个月</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:99px;background:#f0ede6;color:#666">${phaseLabel}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
+          <div style="flex:1;height:4px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:100px">
+            <div style="height:100%;border-radius:99px;background:${heatColor};width:${heatPct}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:10px;color:${heatColor};font-weight:600">热度 ${heatPct}%</span>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:14px;font-weight:700;color:${isActive?'#2e7d32':'#999'}">${r.type==='doc'?(isActive?'+'+Math.max(1,Math.round(mult*4))+'声望':'已完结'):(isActive?'+'+thisMonthIncome+'万/月':'长尾 +'+thisMonthIncome+'万')}</div>
+        <div style="font-size:10px;color:#999;margin-top:1px">${streamBonus>1?'📱平台加成×1.5':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStreamingInfo(){
+  const el=document.getElementById('streaming-info');
+  const canSign=G.buildings.studio.lv>=2&&G.fame>=40;
+  if(G.streamingDeal){
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:4px 0">
+      <div style="font-size:28px">📱</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:#2e7d32">✅ 已签约流媒体平台</div>
+        <div style="font-size:12px;color:#666;margin-top:3px">单曲 / 专辑发行收益 ×1.5，长期有效</div>
+      </div>
+    </div>`;
+  } else {
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:4px 0">
+      <div style="font-size:28px;opacity:${canSign?1:.4}">📱</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">流媒体平台合约</div>
+        <div style="font-size:12px;color:#666;margin-top:3px">签约后单曲/专辑收益永久 ×1.5 · 费用 50万</div>
+        <div style="font-size:11px;color:#999;margin-top:2px">解锁条件：录音室 Lv.2 且声望 ≥ 40</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="signStreaming()" ${canSign?'':'disabled'}>签约 50万</button>
+    </div>`;
+  }
+}
+
+function signStreaming(){
+  if(!G.buildings.studio.lv>=2){toast('需要录音室 Lv.2+','error');return;}
+  if(G.fame<40){toast('需要声望 ≥ 40','error');return;}
+  if(G.money<50){toast('资金不足 50万','error');return;}
+  G.money-=50;
+  G.streamingDeal=true;
+  addLog('签约流媒体平台','minus',50);
+  saveGame();renderContent();updateStats();
+  toast('📱 流媒体合约签署成功！单曲/专辑收益永久×1.5','success');
+}
+
+let contentArtistIdx=0, contentTypeId='single';
+
 function init(){
   const hasSave=loadGame();
   if(!G.usedEvents) G.usedEvents=[];
   if(!G.lastEvents) G.lastEvents=[];
   if(!G.monthlyHistory) G.monthlyHistory=[];
+  if(!G.releases) G.releases=[];
+  if(G.streamingDeal===undefined) G.streamingDeal=false;
   G.artists.forEach(a=>{if(a.pr===undefined) a.pr=60;});
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
@@ -703,6 +902,7 @@ function showSection(id){
   document.getElementById('nav-'+id).classList.add('active');
   renderScene(id);
   if(id==='finance') renderFinance();
+  if(id==='content') renderContent();
 }
 
 function switchTab(tab,el){
@@ -991,6 +1191,15 @@ function nextMonth(){
   let income=0,cost=0;
   const lv=G.buildings;
   if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
+  (G.releases||[]).forEach(r=>{
+    const age=G.month-r.releasedAt;
+    if(r.type==='doc'&&age>=r.duration) return;
+    const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+    const streamBonus=G.streamingDeal&&(r.type==='single'||r.type==='album')?1.5:1;
+    const g=Math.round(r.baseIncome*mult*streamBonus);
+    if(r.type==='doc'){G.fame+=Math.max(1,Math.round(mult*4));}
+    if(g>0){income+=g;addLog(r.title+' 发行收益','plus',g);}
+  });
   G.artists.forEach(a=>{
     const eff=1+(lv.practice.lv*0.2);
     if(a.status==='训练中'){
