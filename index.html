@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的娱乐公司</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f5f4f0;color:#1a1a1a;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #e8e5de;position:sticky;top:0;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,0.05)}
+.topbar-title{font-size:16px;font-weight:600;color:#1a1a1a}
+.stats{display:flex;gap:18px;align-items:center}
+.stat{display:flex;align-items:center;gap:5px;font-size:13px;color:#666}
+.stat strong{color:#1a1a1a;font-weight:600}
+.btn-next{background:#1a1a1a;color:#fff;border:none;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:opacity 0.15s}
+.btn-next:hover{opacity:0.8}
+.layout{display:grid;grid-template-columns:200px 1fr;min-height:calc(100vh - 53px)}
+.sidebar{background:#fff;border-right:1px solid #e8e5de;padding:14px 10px;display:flex;flex-direction:column;gap:3px}
+.nav-label{font-size:11px;color:#999;padding:4px 10px 8px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase}
+.nav-btn{display:flex;align-items:center;gap:9px;padding:9px 12px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;color:#666;width:100%;text-align:left;transition:all 0.15s}
+.nav-btn:hover{background:#f5f4f0;color:#1a1a1a}
+.nav-btn.active{background:#f0ede6;color:#1a1a1a;font-weight:600}
+.content{padding:20px;overflow-y:auto}
+.section{display:none}
+.section.active{display:block}
+.section-title{font-size:17px;font-weight:600;margin-bottom:16px;color:#1a1a1a}
+.cards-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.metric-card{background:#fff;border:1px solid #e8e5de;border-radius:10px;padding:14px;text-align:center}
+.metric-label{font-size:11px;color:#999;margin-bottom:5px;font-weight:500}
+.metric-val{font-size:24px;font-weight:700;color:#1a1a1a}
+.metric-sub{font-size:11px;color:#999;margin-top:2px}
+.card{background:#fff;border:1px solid #e8e5de;border-radius:12px;padding:16px;margin-bottom:14px}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:600;color:#1a1a1a}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid #d0cec7;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#333;transition:all 0.15s;font-weight:500}
+.btn:hover{background:#f5f4f0}
+.btn:active{transform:scale(0.98)}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn-primary:hover{background:#333;background:#333}
+.btn-success{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7}
+.btn-sm{padding:5px 10px;font-size:12px}
+.artist-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0ede6}
+.artist-row:last-child{border-bottom:none}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
+.artist-info{flex:1}
+.artist-name{font-size:13px;font-weight:600;color:#1a1a1a}
+.artist-tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.tag{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500}
+.tag.singing{background:#e3f2fd;color:#1565c0}
+.tag.dance{background:#fff8e1;color:#e65100}
+.tag.acting{background:#e8f5e9;color:#2e7d32}
+.tag.rap{background:#fce4ec;color:#880e4f}
+.status-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:500}
+.status-training{background:#fff8e1;color:#e65100}
+.status-debut{background:#e8f5e9;color:#2e7d32}
+.status-idle{background:#f5f4f0;color:#999}
+.status-working{background:#e3f2fd;color:#1565c0}
+.bar-wrap{display:flex;align-items:center;gap:6px}
+.bar-bg{flex:1;height:5px;background:#f0ede6;border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width 0.4s}
+.bar-val{font-size:11px;color:#999;min-width:22px;text-align:right}
+.bar-blue{background:#378ADD}
+.bar-amber{background:#EF9F27}
+.bar-green{background:#639922}
+.bar-pink{background:#D4537E}
+.build-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.build-card{background:#fff;border:1px solid #e8e5de;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.lv-bar{height:4px;background:#f0ede6;border-radius:99px;overflow:hidden}
+.lv-fill{height:100%;border-radius:99px;background:#378ADD;transition:width 0.4s}
+.event-item{display:flex;align-items:flex-start;gap:12px;padding:14px;background:#fff;border:1px solid #e8e5de;border-radius:12px;margin-bottom:10px}
+.event-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.event-info{flex:1}
+.event-name{font-size:14px;font-weight:600;color:#1a1a1a}
+.event-desc{font-size:12px;color:#666;margin-top:3px}
+.event-reward{font-size:12px;color:#2e7d32;margin-top:5px;font-weight:500}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:22px;width:340px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.15)}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:16px}
+.recruit-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e8e5de;border-radius:10px;cursor:pointer;transition:all 0.15s;margin-bottom:8px}
+.recruit-item:hover{background:#f5f4f0;border-color:#ccc}
+.recruit-stats{flex:1}
+.recruit-name{font-size:13px;font-weight:600}
+.mini-bars{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.mini-bar-item{display:flex;align-items:center;gap:3px;font-size:10px;color:#999}
+.mini-bar-bg{width:36px;height:3px;background:#f0ede6;border-radius:99px;overflow:hidden}
+.mini-bar-fill{height:100%;border-radius:99px}
+.cost-badge{font-size:12px;color:#666;white-space:nowrap;font-weight:500}
+.toast{position:fixed;bottom:24px;right:24px;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;z-index:200;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-success{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
+.toast-error{background:#ffebee;color:#c62828;border:1px solid #ef9a9a}
+.tab-bar{display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid #e8e5de}
+.tab{padding:8px 18px;font-size:13px;border:none;background:transparent;cursor:pointer;color:#999;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;font-weight:500}
+.tab.active{color:#1a1a1a;font-weight:600;border-bottom-color:#1a1a1a}
+.progress-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.progress-label{font-size:12px;color:#999;flex-shrink:0}
+.log-item{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid #f0ede6}
+.log-item:last-child{border-bottom:none}
+.log-plus{color:#2e7d32;font-weight:600}
+.log-minus{color:#c62828;font-weight:600}
+.tip-box{background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#5d4037;line-height:1.9}
+@media(max-width:600px){
+  .cards-grid{grid-template-columns:repeat(2,1fr)}
+  .build-grid{grid-template-columns:repeat(2,1fr)}
+  .layout{grid-template-columns:1fr}
+  .sidebar{flex-direction:row;overflow-x:auto;padding:8px}
+  .nav-label{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">🎬 我的娱乐公司</div>
+  <div class="stats">
+    <div class="stat">💰 <strong id="money">500</strong> 万</div>
+    <div class="stat">⭐ 声望 <strong id="fame">12</strong></div>
+    <div class="stat">📅 第 <strong id="month">1</strong> 月</div>
+    <button class="btn-next" onclick="nextMonth()">▶ 下一月</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="nav-label">主菜单</div>
+    <button class="nav-btn active" id="nav-overview" onclick="showSection('overview')">📊 公司总览</button>
+    <button class="nav-btn" id="nav-artists" onclick="showSection('artists')">🎤 艺人管理</button>
+    <button class="nav-btn" id="nav-buildings" onclick="showSection('buildings')">🏢 设施建设</button>
+    <button class="nav-btn" id="nav-events" onclick="showSection('events')">🏆 活动赛事</button>
+    <button class="nav-btn" id="nav-finance" onclick="showSection('finance')">📈 财务报表</button>
+    <div style="flex:1"></div>
+    <div style="padding:10px 12px;font-size:11px;color:#999;border-top:1px solid #f0ede6">
+      <div id="company-level" style="font-weight:600;color:#666">⭐ 初创公司</div>
+      <div style="margin-top:4px">艺人: <span id="artist-count">0</span> / 10</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- 总览 -->
+    <div class="section active" id="section-overview">
+      <div class="section-title">公司总览</div>
+      <div class="cards-grid">
+        <div class="metric-card"><div class="metric-label">本月收入</div><div class="metric-val" id="ov-income">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">在职艺人</div><div class="metric-val" id="ov-artists">0</div><div class="metric-sub">人</div></div>
+        <div class="metric-card"><div class="metric-label">粉丝总量</div><div class="metric-val" id="ov-fans">0</div><div class="metric-sub">万人</div></div>
+        <div class="metric-card"><div class="metric-label">公司声望</div><div class="metric-val" id="ov-fame">12</div><div class="metric-sub">点</div></div>
+      </div>
+      <div class="tip-box" id="monthly-tips">💡 欢迎来到我的娱乐公司！建议先建造直播基地获取稳定收入，再招募练习生开始培养艺人之路！</div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">设施状态</span></div>
+        <div id="facility-status"></div>
+      </div>
+    </div>
+
+    <!-- 艺人 -->
+    <div class="section" id="section-artists">
+      <div class="section-title">艺人管理</div>
+      <div class="tab-bar">
+        <button class="tab active" onclick="switchTab('roster',this)">花名册</button>
+        <button class="tab" onclick="switchTab('train',this)">训练安排</button>
+      </div>
+      <div id="tab-roster">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="font-size:13px;color:#999">当前签约艺人</span>
+          <button class="btn btn-primary btn-sm" onclick="openRecruit()">＋ 招募练习生</button>
+        </div>
+        <div class="card" id="artist-list-wrap">
+          <div id="artist-list" style="color:#999;font-size:13px;padding:8px 0">暂无艺人，点击「招募练习生」开始！</div>
+        </div>
+      </div>
+      <div id="tab-train" style="display:none">
+        <div class="card">
+          <div class="card-head"><span class="card-title">安排艺人状态</span></div>
+          <div id="train-list" style="color:#999;font-size:13px">暂无艺人</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 建设 -->
+    <div class="section" id="section-buildings">
+      <div class="section-title">设施建设</div>
+      <div class="build-grid" id="build-grid"></div>
+    </div>
+
+    <!-- 活动 -->
+    <div class="section" id="section-events">
+      <div class="section-title">活动赛事</div>
+      <div id="event-list"></div>
+    </div>
+
+    <!-- 财务 -->
+    <div class="section" id="section-finance">
+      <div class="section-title">财务报表</div>
+      <div class="cards-grid">
+        <div class="metric-card"><div class="metric-label">总资金</div><div class="metric-val" id="fin-money">500</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">月收入</div><div class="metric-val" id="fin-income">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">月支出</div><div class="metric-val" id="fin-cost">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">净利润</div><div class="metric-val" id="fin-net">0</div><div class="metric-sub">万元</div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">收支记录</span></div>
+        <div id="income-log" style="max-height:280px;overflow-y:auto"><div style="font-size:13px;color:#999">暂无记录</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 招募弹窗 -->
+<div class="modal-bg" id="modal-recruit">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0">招募练习生</div>
+      <button class="btn btn-sm" onclick="closeRecruit()">✕</button>
+    </div>
+    <div style="font-size:12px;color:#999;margin-bottom:12px">当前资金：<strong id="modal-money" style="color:#1a1a1a">500</strong> 万 · 点击签约</div>
+    <div id="recruit-list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const G = {
+  money: 500, fame: 12, month: 1,
+  artists: [], log: [],
+  monthlyIncome: 0, monthlyCost: 0,
+  buildings: {
+    live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
+    practice: {name:'训练室',     lv:1, maxLv:5, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
+    studio:   {name:'录音室',     lv:1, maxLv:5, icon:'🎙️', cost:100, effect:'音乐制作加成'},
+    fanshall: {name:'粉丝见面厅', lv:0, maxLv:3, icon:'💝', cost:150, effect:'人气加成'},
+    mv:       {name:'MV拍摄间',   lv:0, maxLv:3, icon:'🎬', cost:200, effect:'发行收益+30%'},
+    office:   {name:'经纪办公室', lv:1, maxLv:4, icon:'🏢', cost:50,  effect:'可签约+2人/级'},
+  }
+};
+
+const POOL = [
+  {name:'林晓晴',abbr:'晓',color:'#dbeafe',tc:'#1e40af',singing:72,dance:58,acting:45,rap:20,cost:30,rarity:'普通'},
+  {name:'张宇航',abbr:'宇',color:'#fef3c7',tc:'#92400e',singing:45,dance:80,acting:30,rap:65,cost:40,rarity:'良好'},
+  {name:'苏梦琪',abbr:'梦',color:'#fce7f3',tc:'#831843',singing:88,dance:62,acting:70,rap:15,cost:80,rarity:'优秀'},
+  {name:'陈浩然',abbr:'浩',color:'#dcfce7',tc:'#14532d',singing:55,dance:45,acting:92,rap:30,cost:100,rarity:'稀有'},
+  {name:'韩依依',abbr:'依',color:'#ede9fe',tc:'#4c1d95',singing:78,dance:75,acting:60,rap:45,cost:60,rarity:'良好'},
+  {name:'李铭宇',abbr:'铭',color:'#ffedd5',tc:'#7c2d12',singing:50,dance:55,acting:40,rap:90,cost:50,rarity:'普通'},
+  {name:'赵紫妍',abbr:'紫',color:'#d1fae5',tc:'#064e3b',singing:95,dance:70,acting:80,rap:25,cost:150,rarity:'✨传奇'},
+  {name:'陆峰',abbr:'峰',color:'#fef9c3',tc:'#713f12',singing:60,dance:88,acting:50,rap:72,cost:70,rarity:'良好'},
+];
+
+const EVENTS = [
+  {name:'校园歌唱比赛',icon:'🎵',bg:'#f0fdf4',desc:'参加全市高校联合歌唱比赛，提升知名度',req:'需要歌唱60+艺人 ≥1',cost:5,fameGain:30,moneyGain:20,check:()=>G.artists.some(a=>a.singing>60)},
+  {name:'新人选秀综艺',icon:'📺',bg:'#eff6ff',desc:'参加热门选秀节目，快速积累粉丝',req:'需要艺人 ≥1',cost:10,fameGain:50,moneyGain:50,check:()=>G.artists.length>0},
+  {name:'品牌代言活动',icon:'💼',bg:'#fffbeb',desc:'接受知名品牌代言，直接获得高收益',req:'需声望 ≥50',cost:0,fameGain:10,moneyGain:150,check:()=>G.fame>=50},
+  {name:'演唱会巡演',icon:'🎪',bg:'#fdf4ff',desc:'举办小型演唱会，收获大量粉丝和资金',req:'需艺人 ≥2 且声望 ≥80',cost:50,fameGain:80,moneyGain:300,check:()=>G.artists.length>=2&&G.fame>=80},
+  {name:'颁奖典礼',icon:'🏆',bg:'#fff7ed',desc:'参加年度娱乐颁奖典礼，赢取大奖',req:'需声望 ≥150',cost:20,fameGain:200,moneyGain:100,check:()=>G.fame>=150},
+];
+
+let recruitPool=[], artistTabCur='roster';
+
+function init(){renderBuildings();renderEvents();updateOverview();updateSidebar();}
+
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  document.getElementById('nav-'+id).classList.add('active');
+  if(id==='finance') renderFinance();
+}
+
+function switchTab(tab,el){
+  artistTabCur=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-roster').style.display=tab==='roster'?'':'none';
+  document.getElementById('tab-train').style.display=tab==='train'?'':'none';
+  if(tab==='train') renderTrainList();
+}
+
+function renderArtistList(){
+  const el=document.getElementById('artist-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px;padding:8px 0">暂无艺人，点击「招募练习生」开始！</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>`
+    <div class="artist-row">
+      <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
+      <div class="artist-info">
+        <div class="artist-name">${a.name}</div>
+        <div class="artist-tags">
+          ${a.singing>60?'<span class="tag singing">唱</span>':''}
+          ${a.dance>60?'<span class="tag dance">舞</span>':''}
+          ${a.acting>60?'<span class="tag acting">演</span>':''}
+          ${a.rap>60?'<span class="tag rap">说唱</span>':''}
+          <span class="status-badge ${statusCls(a.status)}">${a.status}</span>
+        </div>
+      </div>
+      <div style="flex:1;max-width:130px">
+        <div class="bar-wrap"><span style="font-size:10px;color:#999;width:14px">唱</span><div class="bar-bg"><div class="bar-fill bar-blue" style="width:${a.singing}%"></div></div><span class="bar-val">${a.singing}</span></div>
+        <div class="bar-wrap" style="margin-top:3px"><span style="font-size:10px;color:#999;width:14px">舞</span><div class="bar-bg"><div class="bar-fill bar-amber" style="width:${a.dance}%"></div></div><span class="bar-val">${a.dance}</span></div>
+      </div>
+      <div style="font-size:11px;color:#999;white-space:nowrap">${a.fans||0}万粉</div>
+    </div>
+  `).join('');
+}
+
+function renderTrainList(){
+  const el=document.getElementById('train-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>`
+    <div class="artist-row">
+      <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${a.name}</div><div style="font-size:11px;color:#999;margin-top:2px">当前: ${a.status}</div></div>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-sm" onclick="setStatus(${i},'训练中')" ${a.status==='训练中'?'disabled':''}>训练</button>
+        <button class="btn btn-sm btn-success" onclick="setStatus(${i},'工作中')" ${a.status==='工作中'?'disabled':''}>接工作</button>
+        <button class="btn btn-sm" onclick="setStatus(${i},'休息中')" ${a.status==='休息中'?'disabled':''}>休息</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'status-debut':s==='工作中'?'status-working':'status-idle';}
+
+function setStatus(i,s){
+  G.artists[i].status=s;
+  renderArtistList();renderTrainList();
+  toast(G.artists[i].name+' 状态已更新为「'+s+'」','success');
+}
+
+function renderBuildings(){
+  const el=document.getElementById('build-grid');
+  el.innerHTML=Object.entries(G.buildings).map(([k,b])=>`
+    <div class="build-card">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:38px;height:38px;border-radius:10px;background:#f5f4f0;display:flex;align-items:center;justify-content:center;font-size:18px">${b.icon}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600">${b.name}</div>
+          <div style="font-size:11px;color:#999">${b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv} · ${b.effect}</div>
+        </div>
+      </div>
+      <div class="lv-bar"><div class="lv-fill" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
+      <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
+        ${b.lv===0?'建造':'升级'} (${b.cost}万)
+      </button>
+    </div>
+  `).join('');
+}
+
+function upgradeBuilding(k){
+  const b=G.buildings[k];
+  if(b.lv>=b.maxLv){toast('已达最高等级','error');return;}
+  if(G.money<b.cost){toast('资金不足 '+b.cost+' 万！','error');return;}
+  const paid=b.cost;
+  G.money-=paid; b.lv++; b.cost=Math.round(b.cost*1.5);
+  addLog((b.lv===1?'建造':'升级')+b.name,'minus',paid);
+  renderBuildings();updateStats();updateOverview();
+  toast(b.name+(b.lv===1?' 建造完成！':' 升级至 Lv.'+b.lv+'！'),'success');
+}
+
+function renderEvents(){
+  const el=document.getElementById('event-list');
+  el.innerHTML=EVENTS.map((ev,i)=>`
+    <div class="event-item">
+      <div class="event-icon" style="background:${ev.bg}">${ev.icon}</div>
+      <div class="event-info">
+        <div class="event-name">${ev.name}</div>
+        <div class="event-desc">${ev.desc}</div>
+        <div style="font-size:11px;color:#999;margin-top:3px">条件: ${ev.req}${ev.cost>0?' · 报名费: '+ev.cost+'万':''}</div>
+        <div class="event-reward">🏅 +${ev.fameGain}声望  💰 +${ev.moneyGain}万</div>
+      </div>
+      <button class="btn btn-sm btn-primary" style="flex-shrink:0;align-self:center" onclick="joinEvent(${i})">参加</button>
+    </div>
+  `).join('');
+}
+
+function joinEvent(i){
+  const ev=EVENTS[i];
+  if(!ev.check()){toast('条件不满足：'+ev.req,'error');return;}
+  if(G.money<ev.cost){toast('资金不足！','error');return;}
+  G.money-=ev.cost; G.money+=ev.moneyGain; G.fame+=ev.fameGain;
+  if(ev.cost>0) addLog(ev.name+' 报名费','minus',ev.cost);
+  addLog(ev.name+' 奖励','plus',ev.moneyGain);
+  G.artists.forEach(a=>{if(a.status==='工作中'||a.status==='已出道') a.fans=Math.round((a.fans||0)+ev.fameGain/10);});
+  updateStats();updateOverview();updateTips();
+  toast('活动成功！声望+'+ev.fameGain+'，收入+'+ev.moneyGain+'万','success');
+}
+
+function openRecruit(){
+  const maxArtists=2+G.buildings.office.lv*2;
+  if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
+  recruitPool=[...POOL].sort(()=>Math.random()-0.5).slice(0,4);
+  document.getElementById('modal-money').textContent=G.money;
+  const el=document.getElementById('recruit-list');
+  el.innerHTML=recruitPool.map((p,i)=>`
+    <div class="recruit-item" onclick="recruit(${i})">
+      <div class="avatar" style="background:${p.color};color:${p.tc};width:40px;height:40px">${p.abbr}</div>
+      <div class="recruit-stats">
+        <div class="recruit-name">${p.name} <span style="font-size:10px;background:#f5f4f0;padding:1px 6px;border-radius:99px;color:#666">${p.rarity}</span></div>
+        <div class="mini-bars">
+          <div class="mini-bar-item">唱<div class="mini-bar-bg"><div class="mini-bar-fill bar-blue" style="width:${p.singing}%"></div></div>${p.singing}</div>
+          <div class="mini-bar-item">舞<div class="mini-bar-bg"><div class="mini-bar-fill bar-amber" style="width:${p.dance}%"></div></div>${p.dance}</div>
+          <div class="mini-bar-item">演<div class="mini-bar-bg"><div class="mini-bar-fill bar-green" style="width:${p.acting}%"></div></div>${p.acting}</div>
+          <div class="mini-bar-item">说<div class="mini-bar-bg"><div class="mini-bar-fill bar-pink" style="width:${p.rap}%"></div></div>${p.rap}</div>
+        </div>
+      </div>
+      <div class="cost-badge">${p.cost}万</div>
+    </div>
+  `).join('');
+  document.getElementById('modal-recruit').classList.add('open');
+}
+
+function closeRecruit(){document.getElementById('modal-recruit').classList.remove('open');}
+
+function recruit(i){
+  const p=recruitPool[i];
+  if(G.money<p.cost){toast('资金不足 '+p.cost+' 万！','error');return;}
+  G.money-=p.cost;
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1)});
+  addLog('签约'+p.name,'minus',p.cost);
+  updateStats();renderArtistList();updateOverview();updateSidebar();closeRecruit();
+  toast('成功签约 '+p.name+'！','success');
+}
+
+function nextMonth(){
+  G.month++;
+  let income=0,cost=0;
+  const lv=G.buildings;
+  if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
+  G.artists.forEach(a=>{
+    const eff=1+(lv.practice.lv*0.2);
+    if(a.status==='训练中'){
+      a.singing=Math.min(99,a.singing+Math.round(Math.random()*3*eff));
+      a.dance=Math.min(99,a.dance+Math.round(Math.random()*3*eff));
+      a.acting=Math.min(99,a.acting+Math.round(Math.random()*2*eff));
+      if(a.singing>75&&a.dance>65){a.status='已出道';toast(a.name+' 训练达标，成功出道！🎉','success');}
+      cost+=5;
+    }
+    if(a.status==='工作中'||a.status==='已出道'){
+      const mvBonus=lv.mv.lv>0?1.3:1;
+      const g=Math.round(((a.singing+a.dance)/12+Math.random()*8)*mvBonus);
+      income+=g; a.fans=Math.round((a.fans||0)+g/8);
+      addLog(a.name+' 演出收入','plus',g);
+    }
+    if(a.status==='休息中') cost+=2;
+  });
+  G.money+=income-cost;
+  G.monthlyIncome=income; G.monthlyCost=cost;
+  G.fame+=Math.floor(income/25+1);
+  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();
+  toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万','success');
+}
+
+function updateStats(){
+  document.getElementById('money').textContent=G.money;
+  document.getElementById('fame').textContent=G.fame;
+  document.getElementById('month').textContent=G.month;
+}
+
+function updateSidebar(){
+  document.getElementById('artist-count').textContent=G.artists.length;
+  const lv=G.fame<30?'⭐ 初创公司':G.fame<80?'⭐⭐ 新兴公司':G.fame<200?'⭐⭐⭐ 知名公司':G.fame<500?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
+  document.getElementById('company-level').textContent=lv;
+}
+
+function updateOverview(){
+  document.getElementById('ov-income').textContent=G.monthlyIncome;
+  document.getElementById('ov-artists').textContent=G.artists.length;
+  document.getElementById('ov-fans').textContent=G.artists.reduce((s,a)=>s+(a.fans||0),0);
+  document.getElementById('ov-fame').textContent=G.fame;
+  const fac=document.getElementById('facility-status');
+  fac.innerHTML=Object.values(G.buildings).map(b=>`
+    <div class="progress-row">
+      <span class="progress-label" style="width:90px">${b.icon} ${b.name}</span>
+      <div class="bar-bg"><div class="bar-fill bar-blue" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
+      <span class="bar-val" style="width:40px;text-align:right">${b.lv===0?'未建':'Lv.'+b.lv+'/'+b.maxLv}</span>
+    </div>
+  `).join('');
+  updateTips();
+}
+
+function updateTips(){
+  const tips=[];
+  if(G.buildings.live.lv===0) tips.push('💡 建议优先建造直播基地，每月稳定收入');
+  if(G.artists.length===0) tips.push('💡 前往艺人管理招募第一位练习生');
+  if(G.artists.some(a=>a.status==='训练中')) tips.push('⏳ 有练习生训练中，等待属性达标后自动出道');
+  if(G.artists.some(a=>a.status==='已出道')) tips.push('✅ 有艺人已出道！前往训练安排让其「接工作」赚钱');
+  if(G.fame>=50&&G.buildings.fanshall.lv===0) tips.push('🌟 声望达50，可建造粉丝见面厅放大人气加成');
+  if(G.fame>=80&&G.artists.length>=2) tips.push('🎪 条件满足！可以举办演唱会巡演啦');
+  if(!tips.length) tips.push('📈 公司运转良好，持续扩大规模冲击娱乐帝国！');
+  document.getElementById('monthly-tips').innerHTML=tips.join('<br>');
+}
+
+function renderFinance(){
+  document.getElementById('fin-money').textContent=G.money;
+  document.getElementById('fin-income').textContent=G.monthlyIncome;
+  document.getElementById('fin-cost').textContent=G.monthlyCost;
+  document.getElementById('fin-net').textContent=G.monthlyIncome-G.monthlyCost;
+  const log=document.getElementById('income-log');
+  if(!G.log.length){log.innerHTML='<div style="font-size:13px;color:#999">暂无记录</div>';return;}
+  log.innerHTML=G.log.slice().reverse().map(l=>`
+    <div class="log-item">
+      <span style="color:#666">${l.desc}</span>
+      <span class="${l.type==='plus'?'log-plus':'log-minus'}">${l.type==='plus'?'+':'-'}${l.val}万</span>
+    </div>
+  `).join('');
+}
+
+function addLog(desc,type,val){
+  G.log.push({desc,type,val:Math.round(val)});
+  if(G.log.length>50) G.log.shift();
+}
+
+function toast(msg,type='success'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast toast-'+type+' show';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+document.getElementById('modal-recruit').addEventListener('click',function(e){if(e.target===this)closeRecruit();});
+
+init();
+</script>
+</body>
+</html>
