@@ -488,6 +488,10 @@ const G = {
     fanshall: {name:'粉丝见面厅', lv:0, maxLv:3, icon:'💝', cost:150, effect:'人气加成'},
     mv:       {name:'MV拍摄间',   lv:0, maxLv:3, icon:'🎬', cost:200, effect:'发行收益+30%'},
     office:   {name:'经纪办公室', lv:1, maxLv:4, icon:'🏢', cost:50,  effect:'可签约+2人/级'},
+    merch:    {name:'周边商品部', lv:0, maxLv:4, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
+    media:    {name:'媒体中心',   lv:0, maxLv:4, icon:'📡', cost:150, effect:'降低负面事件概率'},
+    health:   {name:'健康管理中心',lv:0,maxLv:3, icon:'🏥', cost:100, effect:'防艺人停工'},
+    legal:    {name:'法务部',     lv:0, maxLv:4, icon:'⚖️', cost:130, effect:'降低合同续签费'},
   }
 };
 
@@ -1181,7 +1185,8 @@ function renderContracts(){
     const remaining=end-G.month;
     const isExpired=remaining<=0;
     const isExpiring=remaining>0&&remaining<=3;
-    const renewCost=Math.round(30+(a.fans||0)*0.5);
+    const legalDisc=(G.buildings.legal?.lv||0)*0.1;
+    const renewCost=Math.round((30+(a.fans||0)*0.5)*(1-legalDisc));
     return `<div class="contract-row">
       <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
       <div style="flex:1">
@@ -1199,7 +1204,8 @@ function renderContracts(){
 
 function renewContract(i){
   const a=G.artists[i];
-  const renewCost=Math.round(30+((a.fans||0)*0.5));
+  const legalDisc=(G.buildings.legal?.lv||0)*0.1;
+  const renewCost=Math.round((30+(a.fans||0)*0.5)*(1-legalDisc));
   if(G.money<renewCost){toast('资金不足 '+renewCost+' 万','error');return;}
   G.money-=renewCost;
   a.contractEnd=(a.contractEnd||G.month)+24;
@@ -1451,6 +1457,13 @@ function getBuildingContrib(k,b){
   if(k==='fanshall') return `公关见面会已解锁 · 艺人人气加成`;
   if(k==='mv')       return `演出 & 内容发行收益 ×1.3`;
   if(k==='office')   return `签约上限 ${2+b.lv*2}人（当前${G.artists.length}人）`;
+  if(k==='merch'){
+    const tf=G.artists.reduce((s,a)=>s+(a.fans||0),0);
+    return `粉丝月收益 +${Math.round(tf/100*b.lv*2)}万（当前${tf}万粉丝）`;
+  }
+  if(k==='media')  return `负面事件概率 -${b.lv*8}%，PR效果增强`;
+  if(k==='health') return `防意外停工 · 休息艺人每月舆论恢复+3`;
+  if(k==='legal')  return `合同续签费 -${b.lv*10}%`;
   return null;
 }
 
@@ -1462,6 +1475,10 @@ function getBuildingActionCfg(k){
     fanshall: {label:'明星签售', cost:20,  desc:'所有出道艺人粉丝+8%，舆论+15'},
     mv:       {label:'精制特效', cost:35,  desc:'当前所有上线内容额外结算一次收益'},
     office:   {label:'商务拓展', cost:0,   desc:'随机获得商务合作收益'},
+    merch:    {label:'限定周边', cost:30,  desc:'出道艺人粉丝×1.12，套现周边收益'},
+    media:    {label:'公关攻势', cost:25,  desc:'全员舆论+12，移除最差负面趋势'},
+    health:   {label:'紧急复健', cost:20,  desc:'粉丝最多的休息艺人立即恢复工作'},
+    legal:    {label:'合同谈判', cost:15,  desc:'最快到期合同自动延长12个月'},
   }[k];
 }
 
@@ -1476,6 +1493,9 @@ function doFacilityAction(k){
   if(k==='studio'&&!G.pendingReleases?.length){toast('当前没有制作中的内容','error');return;}
   if(k==='fanshall'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
   if(k==='mv'&&!G.releases?.length){toast('当前没有上线的内容','error');return;}
+  if(k==='merch'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(k==='health'&&!G.artists.some(a=>a.status==='休息中')){toast('当前没有休息中的艺人','error');return;}
+  if(k==='legal'&&!G.artists.length){toast('暂无签约艺人','error');return;}
   if(G.money<cfg.cost){toast('资金不足 '+cfg.cost+' 万','error');return;}
   if(cfg.cost>0){G.money-=cfg.cost;addLog(b.name+'·'+cfg.label,'minus',cfg.cost);}
   if(!G.buildingActions) G.buildingActions={};
@@ -1511,9 +1531,31 @@ function doFacilityAction(k){
     const bonus=Math.round(20+Math.random()*40*b.lv);
     G.money+=bonus; addLog('商务拓展收益','plus',bonus);
     result='获得商务合作 +'+bonus+'万';
+  } else if(k==='merch'){
+    const working=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道');
+    let bonus=0;
+    working.forEach(a=>{const prev=a.fans||0;a.fans=Math.round(prev*1.12);bonus+=Math.round(prev*0.08*b.lv);});
+    if(bonus>0){G.money+=bonus;addLog('限定周边销售收益','plus',bonus);}
+    result=working.length+'名艺人粉丝×1.12，周边收益 +'+bonus+'万';
+  } else if(k==='media'){
+    G.artists.forEach(a=>{a.pr=Math.min(100,(a.pr||60)+12);});
+    const bad=(G.activeTrends||[]).find(t=>t.bad);
+    if(bad){G.activeTrends=G.activeTrends.filter(t=>t!==bad);result='全员舆论+12，已移除负面趋势「'+bad.name+'」';}
+    else result='全员舆论+12（当前无负面趋势）';
+  } else if(k==='health'){
+    const resting=G.artists.filter(a=>a.status==='休息中');
+    const target=resting.reduce((b,a)=>((a.fans||0)>(b.fans||0)?a:b));
+    target.status='工作中';
+    result=displayName(target)+' 复健完毕，已恢复工作状态';
+  } else if(k==='legal'){
+    const target=[...G.artists].filter(a=>a.contractEnd>G.month).sort((a,b)=>(a.contractEnd||0)-(b.contractEnd||0))[0]
+      || G.artists[0];
+    if(!target){toast('暂无可处理的合同','error');G.buildingActions[k]=0;G.money+=cfg.cost;return;}
+    target.contractEnd=(target.contractEnd||G.month)+12;
+    result=displayName(target)+' 合同延长12个月';
   }
   saveGame();renderBuildings();updateStats();updateOverview();
-  if(k==='practice'||k==='fanshall') renderArtistList();
+  if(k==='practice'||k==='fanshall'||k==='merch'||k==='media'||k==='health') renderArtistList();
   toast('✨ '+cfg.label+'：'+result,'success');
 }
 
@@ -1792,7 +1834,8 @@ function triggerMonthlyEvents(){
     }
   }
   G.artists.forEach(a=>{
-    if(Math.random()<(hasTrend('scandal_season')?0.20:0.10)){
+    const _badChance=(hasTrend('scandal_season')?0.20:0.10)*Math.max(0.1,1-(G.buildings.media?.lv||0)*0.08);
+    if(Math.random()<_badChance){
       const pool=MONTHLY_EVENTS.artist.filter(e=>!e.check||e.check(a));
       if(pool.length){
         const ev=pool[Math.floor(Math.random()*pool.length)];
@@ -1851,6 +1894,8 @@ function nextMonth(){
   });
   const lv=G.buildings;
   if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
+  if(lv.merch&&lv.merch.lv>0){const tf=G.artists.reduce((s,a)=>s+(a.fans||0),0);const g=Math.round(tf/100*lv.merch.lv*2);if(g>0){income+=g;addLog('周边商品收益','plus',g);}}
+  if(lv.health&&lv.health.lv>0) G.artists.filter(a=>a.status==='休息中').forEach(a=>{a.pr=Math.min(100,(a.pr||60)+3);});
   (G.releases||[]).forEach(r=>{
     const age=G.month-r.releasedAt;
     if(r.type==='doc'&&age>=r.duration) return;
