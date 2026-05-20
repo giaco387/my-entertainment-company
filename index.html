@@ -479,6 +479,7 @@ const G = {
   artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false,
   monthlyIncome: 0, monthlyCost: 0,
   activeTrends: [], agents: [], rivals: [],
+  pendingEvents: [], pendingReleases: [],
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
     practice: {name:'训练室',     lv:1, maxLv:5, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
@@ -763,7 +764,7 @@ function renderReleaseCreator(){
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="rc-types">
         ${CONTENT_TYPES.map(t=>`<button onclick="selectReleaseType('${t.id}')" id="rct-${t.id}" class="btn" style="flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;${contentTypeId===t.id?'background:#f0ede6;border-color:#1a1a1a;':''}${!t.check()?'opacity:.4;':''}">
           <div style="font-size:15px">${t.icon} <strong style="font-size:13px">${t.name}</strong> <span style="font-size:11px;color:#999;font-weight:400">${t.cost}万</span></div>
-          <div style="font-size:10px;color:#999">${t.req} · 热度${t.duration}个月</div>
+          <div style="font-size:10px;color:#999">${t.req} · 制作${t.productionMonths}个月 · 热度${t.duration}个月</div>
           <div style="font-size:10px;color:#2e7d32">预估首月收益 ~${Math.round(t.income(G.artists[contentArtistIdx]||G.artists[0])*1.5)}万</div>
         </button>`).join('')}
       </div>
@@ -794,24 +795,42 @@ function releaseContent(){
   const rawTitle=titleList[Math.floor(Math.random()*titleList.length)];
   const title=displayName(a)+' - '+rawTitle;
   G.money-=t.cost;
-  const release={type:t.id,artistName:displayName(a),title,releasedAt:G.month,baseIncome:t.income(a),duration:t.duration};
-  G.releases.push(release);
+  const goLiveAt=G.month+t.productionMonths;
+  G.pendingReleases.push({type:t.id,artistName:displayName(a),title,releasedAt:goLiveAt,baseIncome:t.income(a),duration:t.duration,goLiveAt,productionMonths:t.productionMonths});
   addLog(title+' 制作费','minus',t.cost);
   saveGame();renderContent();updateStats();checkAchievements();
-  toast('🎉 「'+title+'」发行成功！','success');
+  toast('🎬 「'+title+'」开始制作，'+t.productionMonths+'个月后正式发布！','success');
 }
 
 function renderActiveReleases(){
   const el=document.getElementById('active-releases');
   const badge=document.getElementById('release-count-badge');
-  if(!G.releases||!G.releases.length){
+  const pending=G.pendingReleases||[];
+  const active=G.releases||[];
+  if(!active.length&&!pending.length){
     el.innerHTML='<div style="font-size:13px;color:#999">还没有发行任何内容</div>';
     if(badge) badge.textContent='';
     return;
   }
-  const sorted=[...G.releases].sort((a,b)=>b.releasedAt-a.releasedAt);
-  if(badge) badge.textContent=sorted.length+'部作品';
-  el.innerHTML=sorted.map((r,i)=>{
+  let html='';
+  if(pending.length){
+    html+=pending.map((r,i)=>{
+      const typeIcon=CONTENT_TYPES.find(t=>t.id===r.type)?.icon||'🎵';
+      const left=r.goLiveAt-G.month;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i<pending.length-1||active.length?'border-bottom:1px solid #f0ede6':''}">
+        <div style="width:42px;height:42px;border-radius:10px;background:#f0e6ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;opacity:.6">${typeIcon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#666">${r.title}</div>
+          <div style="font-size:11px;color:#7c3aed;font-weight:500;margin-top:3px">🔨 制作中 · 还需 ${left} 个月上线</div>
+        </div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:600;flex-shrink:0">制作中</div>
+      </div>`;
+    }).join('');
+  }
+  if(!active.length){el.innerHTML=html;if(badge)badge.textContent=pending.length+'部制作中';return;}
+  const sorted=[...active].sort((a,b)=>b.releasedAt-a.releasedAt);
+  if(badge) badge.textContent=(pending.length?pending.length+'部制作中 · ':'')+sorted.length+'部上线';
+  el.innerHTML=html+sorted.map((r,i)=>{
     const age=G.month-r.releasedAt;
     const isActive=r.type==='doc'?age<r.duration:true;
     const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
@@ -1256,6 +1275,8 @@ function init(){
   if(!G.activeTrends) G.activeTrends=[];
   if(!G.agents) G.agents=[];
   if(!G.rivals) G.rivals=[];
+  if(!G.pendingEvents) G.pendingEvents=[];
+  if(!G.pendingReleases) G.pendingReleases=[];
   G.artists.forEach(a=>{
     if(a.pr===undefined) a.pr=60;
     if(!a.contractEnd) a.contractEnd=G.month+24;
@@ -1450,7 +1471,24 @@ function upgradeBuilding(k){
 
 function renderEvents(){
   const el=document.getElementById('event-list');
-  el.innerHTML=EVENTS.map((ev,i)=>{
+  // 进行中的活动
+  const pending=G.pendingEvents||[];
+  let html='';
+  if(pending.length){
+    html+=`<div style="font-size:11px;font-weight:600;color:#7c3aed;letter-spacing:.5px;margin-bottom:8px">⏳ 进行中（${pending.length}）</div>`;
+    html+=pending.map(pe=>`
+      <div class="event-item" style="border-color:#e9d5ff;background:#fdf4ff">
+        <div class="event-icon" style="background:${pe.bg}">${pe.icon}</div>
+        <div class="event-info">
+          <div class="event-name">${pe.name}</div>
+          <div style="font-size:12px;color:#7c3aed;font-weight:500;margin-top:4px">⏳ 还需 ${pe.completeAt-G.month} 个月揭晓结果</div>
+          <div style="font-size:11px;color:#999;margin-top:3px">预计奖励：⭐+${pe.r.fame} 声望 · 💰+${pe.r.money}万</div>
+        </div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:600;flex-shrink:0;align-self:center">进行中</div>
+      </div>`).join('');
+    html+=`<div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;margin:12px 0 8px">可参加活动</div>`;
+  }
+  html+=EVENTS.map((ev,i)=>{
     const used=G.usedEvents.includes(i);
     const ok=ev.check();
     const btnLabel=used?'本月已参加':ok?'选派艺人 →':'条件不足';
@@ -1461,7 +1499,7 @@ function renderEvents(){
         <div class="event-name">${ev.name}</div>
         <div class="event-desc">${ev.desc}</div>
         <div style="font-size:11px;color:#999;margin-top:3px">📋 ${ev.req}${ev.cost>0?' · 报名费 '+ev.cost+'万':''}</div>
-        <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 至少 ${ev.minArtists} 名艺人，多派多得 · 关键属性：${ev.statHint}</div>
+        <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 至少 ${ev.minArtists} 名 · ${ev.statHint} · ⏳ ${ev.duration}个月后结算</div>
         <div class="event-reward" style="color:#666">🏅 声望  💰 收益（根据选派艺人实力动态计算）</div>
       </div>
       <button class="btn btn-sm ${ok&&!used?'btn-primary':''}" style="flex-shrink:0;align-self:center;white-space:nowrap" onclick="${ok&&!used?'openEventModal('+i+')':''}" ${used||!ok?'disabled':''}>
@@ -1469,6 +1507,7 @@ function renderEvents(){
       </button>
     </div>`;
   }).join('');
+  el.innerHTML=html;
 }
 
 function openEventModal(i){
@@ -1546,10 +1585,11 @@ function updateEventOutcomePreview(){
     const r=ev.compute(sel);
     preview.style.display='';
     preview.innerHTML=`<div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px">预计收益（已选 ${sel.length} 人）</div>
-      <div style="display:flex;gap:20px">
+      <div style="display:flex;gap:20px;margin-bottom:6px">
         <span style="color:#2e7d32;font-weight:700;font-size:15px">⭐ +${r.fame} 声望</span>
         <span style="color:#1565c0;font-weight:700;font-size:15px">💰 +${r.money} 万</span>
-      </div>`;
+      </div>
+      <div style="font-size:11px;color:#7c3aed;font-weight:500">⏳ 进行中 ${ev.duration} 个月后结算奖励</div>`;
   } else {
     preview.style.display='none';
   }
@@ -1572,14 +1612,11 @@ function confirmEventWithArtists(){
   G.usedEvents.push(currentEventIdx);
   selectedEventArtists.forEach(ai=>{if(!(G.usedEventArtists||[]).includes(ai)){(G.usedEventArtists=G.usedEventArtists||[]).push(ai);}});
   if(ev.cost>0){G.money-=ev.cost;addLog(ev.name+' 报名费','minus',ev.cost);}
-  G.money+=r.money;
-  G.fame+=r.fame;
-  addLog(ev.name+' 奖励','plus',r.money);
-  const msg=ev.apply(sel,r);
-  if(!(G.completedEventNames||[]).includes(ev.name))(G.completedEventNames=G.completedEventNames||[]).push(ev.name);
+  const completeAt=G.month+ev.duration;
+  G.pendingEvents.push({evIdx:currentEventIdx,name:ev.name,icon:ev.icon,bg:ev.bg,artistIndices:[...selectedEventArtists],r,completeAt,duration:ev.duration});
   closeEventModal();
   updateStats();updateOverview();updateTips();renderEvents();saveGame();checkAchievements();
-  toast('🎉 '+ev.name+'成功！'+msg,'success');
+  toast('🎬 '+ev.name+' 已开始！'+ev.duration+'个月后揭晓结果','success');
 }
 
 let recruitContractMonths=24;
@@ -1700,6 +1737,26 @@ function nextMonth(){
   updateTrends();
   const agentSalary=(G.agents||[]).reduce((s,id)=>{const ag=agentData(id);return s+(ag?ag.salary:0);},0);
   if(agentSalary>0){cost+=agentSalary;addLog('经纪人团队薪资','minus',agentSalary);}
+  // 完成待处理活动
+  const doneEvents=(G.pendingEvents||[]).filter(pe=>pe.completeAt<=G.month);
+  G.pendingEvents=(G.pendingEvents||[]).filter(pe=>pe.completeAt>G.month);
+  doneEvents.forEach(pe=>{
+    const ev=EVENTS[pe.evIdx];
+    const sel=pe.artistIndices.map(i=>G.artists[i]).filter(Boolean);
+    income+=pe.r.money; G.fame+=pe.r.fame;
+    addLog(pe.name+' 奖励','plus',pe.r.money);
+    const msg=sel.length?ev.apply(sel,pe.r):'';
+    if(!(G.completedEventNames||[]).includes(pe.name))(G.completedEventNames=G.completedEventNames||[]).push(pe.name);
+    G.lastEvents.push({name:pe.name+' 结果出炉',desc:(msg||'活动圆满结束')+' · 声望+'+pe.r.fame+' 收益+'+pe.r.money+'万',icon:pe.icon,type:'good'});
+  });
+  // 完成待处理内容发行
+  const doneReleases=(G.pendingReleases||[]).filter(r=>r.goLiveAt<=G.month);
+  G.pendingReleases=(G.pendingReleases||[]).filter(r=>r.goLiveAt>G.month);
+  doneReleases.forEach(r=>{
+    const {goLiveAt,productionMonths,...release}=r;
+    G.releases.push(release);
+    G.lastEvents.push({name:'「'+r.title+'」正式发布',desc:'内容上线，开始产生收益！',icon:'🎵',type:'good'});
+  });
   const lv=G.buildings;
   if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
   (G.releases||[]).forEach(r=>{

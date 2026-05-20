@@ -1,15 +1,15 @@
 // 内容发行类型
 const CONTENT_TYPES = [
-  { id:'single', name:'数字单曲', icon:'🎵', cost:20, duration:2,
+  { id:'single', name:'数字单曲', icon:'🎵', cost:20, duration:2, productionMonths:1,
     check()  { return G.buildings.studio.lv >= 1; }, req:'录音室 Lv.1+',
     income(a){ return Math.round(8 + (a.fans || 0) * 0.2 + (a.singing || 0) * 0.1); } },
-  { id:'album',  name:'实体专辑', icon:'💿', cost:80, duration:4,
+  { id:'album',  name:'实体专辑', icon:'💿', cost:80, duration:4, productionMonths:2,
     check()  { return G.buildings.studio.lv >= 3; }, req:'录音室 Lv.3+',
     income(a){ return Math.round(20 + (a.fans || 0) * 0.6 + (a.singing || 0) * 0.25); } },
-  { id:'mv',     name:'MV',     icon:'🎬', cost:50, duration:3,
+  { id:'mv',     name:'MV',     icon:'🎬', cost:50, duration:3, productionMonths:1,
     check()  { return G.buildings.mv.lv >= 1; }, req:'MV拍摄间 Lv.1+',
     income(a){ return Math.round(10 + (a.fans || 0) * 0.35 + ((a.singing || 0) + (a.dance || 0)) * 0.06); } },
-  { id:'doc',    name:'纪录片', icon:'📹', cost:40, duration:2,
+  { id:'doc',    name:'纪录片', icon:'📹', cost:40, duration:2, productionMonths:2,
     check()  { return Object.values(G.buildings).some(b => b.lv >= 2); }, req:'任意设施 Lv.2+',
     income(a){ return Math.round(3 + (a.fans || 0) * 0.08); } },
 ];

@@ -5,7 +5,7 @@ const EVENTS = [
   {
     name:'校园歌唱比赛', icon:'🎵', bg:'#f0fdf4',
     desc:'参加全市高校联合歌唱比赛，派出的歌手越多阵容越强',
-    cost:5, minArtists:1, statHint:'唱技',
+    cost:5, minArtists:1, statHint:'唱技', duration:1,
     req:'需要歌唱≥60的出道艺人',
     check()    { return G.artists.some(a => a.singing >= 60 && (a.status === '已出道' || a.status === '工作中')); },
     artistCheck(a) { return (a.status === '已出道' || a.status === '工作中') && a.singing >= 60; },
@@ -23,7 +23,7 @@ const EVENTS = [
   {
     name:'新人选秀综艺', icon:'📺', bg:'#eff6ff',
     desc:'参加热门选秀节目，多位艺人同台更能刷爆热度',
-    cost:10, minArtists:1, statHint:'综合均值',
+    cost:10, minArtists:1, statHint:'综合均值', duration:2,
     req:'需要出道艺人 ≥1',
     check()    { return G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
     artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
@@ -40,7 +40,7 @@ const EVENTS = [
   {
     name:'品牌代言活动', icon:'💼', bg:'#fffbeb',
     desc:'接受品牌代言，派出艺人的粉丝总量决定代言费',
-    cost:0, minArtists:1, statHint:'粉丝量',
+    cost:0, minArtists:1, statHint:'粉丝量', duration:1,
     req:'需声望≥50 且出道艺人',
     check()    { return G.fame >= 50 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
     artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
@@ -56,7 +56,7 @@ const EVENTS = [
   {
     name:'演唱会巡演', icon:'🎪', bg:'#fdf4ff',
     desc:'举办演唱会，多位艺人联合出演票房翻倍增长',
-    cost:50, minArtists:2, statHint:'唱+舞均值',
+    cost:50, minArtists:2, statHint:'唱+舞均值', duration:2,
     req:'需出道艺人≥2 且声望≥80',
     check()    { return G.artists.filter(a => a.status === '已出道' || a.status === '工作中').length >= 2 && G.fame >= 80; },
     artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
@@ -73,7 +73,7 @@ const EVENTS = [
   {
     name:'颁奖典礼', icon:'🏆', bg:'#fff7ed',
     desc:'参加年度颁奖典礼，以最强阵容角逐大奖',
-    cost:20, minArtists:1, statHint:'综合实力',
+    cost:20, minArtists:1, statHint:'综合实力', duration:1,
     req:'需声望≥150 且出道艺人',
     check()    { return G.fame >= 150 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
     artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
