@@ -391,53 +391,91 @@ const POOL = [
 const EVENTS=[
   {
     name:'校园歌唱比赛',icon:'🎵',bg:'#f0fdf4',
-    desc:'参加全市高校联合歌唱比赛，提升初期知名度',
-    cost:5,artistCount:1,statHint:'唱技',
+    desc:'参加全市高校联合歌唱比赛，派出的歌手越多阵容越强',
+    cost:5,minArtists:1,statHint:'唱技',
     req:'需要歌唱≥60的出道艺人',
     check(){return G.artists.some(a=>a.singing>=60&&(a.status==='已出道'||a.status==='工作中'));},
     artistCheck(a){return (a.status==='已出道'||a.status==='工作中')&&a.singing>=60;},
-    compute(sel){const a=sel[0];return{fame:Math.round(20+a.singing*0.3),money:Math.round(10+a.singing*0.25)};},
-    apply(sel,r){const a=sel[0];a.fans=Math.round((a.fans||0)+r.fame*0.5);a.pr=Math.min(100,(a.pr||60)+8);return displayName(a)+' 凭借唱功'+a.singing+'斩获佳绩！';}
+    compute(sel){
+      const best=sel.reduce((b,a)=>a.singing>b.singing?a:b);
+      const multi=1+0.25*(sel.length-1);
+      return{fame:Math.round((20+best.singing*0.3)*multi),money:Math.round((10+best.singing*0.25)*multi)};
+    },
+    apply(sel,r){
+      sel.forEach(a=>{a.fans=Math.round((a.fans||0)+r.fame*0.4);a.pr=Math.min(100,(a.pr||60)+6);});
+      const best=sel.reduce((b,a)=>a.singing>b.singing?a:b);
+      return displayName(best)+(sel.length>1?' 等'+sel.length+'人':'')+'凭借唱功斩获佳绩！';
+    }
   },
   {
     name:'新人选秀综艺',icon:'📺',bg:'#eff6ff',
-    desc:'参加热门选秀节目，综合表现决定人气爆发',
-    cost:10,artistCount:1,statHint:'综合均值',
+    desc:'参加热门选秀节目，多位艺人同台更能刷爆热度',
+    cost:10,minArtists:1,statHint:'综合均值',
     req:'需要出道艺人 ≥1',
     check(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中');},
     artistCheck(a){return a.status==='已出道'||a.status==='工作中';},
-    compute(sel){const a=sel[0];const s=(a.singing+a.dance+a.acting)/3;return{fame:Math.round(25+s*0.4),money:Math.round(20+s*0.5)};},
-    apply(sel,r){const a=sel[0];a.fans=Math.round((a.fans||0)+r.fame*0.8);a.pr=Math.min(100,(a.pr||60)+12);return displayName(a)+' 综合表现亮眼，人气飙升！';}
+    compute(sel){
+      const avg=sel.reduce((s,a)=>s+(a.singing+a.dance+a.acting)/3,0)/sel.length;
+      const multi=1+0.3*(sel.length-1);
+      return{fame:Math.round((25+avg*0.4)*multi),money:Math.round((20+avg*0.5)*multi)};
+    },
+    apply(sel,r){
+      sel.forEach(a=>{a.fans=Math.round((a.fans||0)+r.fame*0.6);a.pr=Math.min(100,(a.pr||60)+10);});
+      return sel.map(displayName).join('、')+(sel.length>1?' 组团出击，':' ')+'综合表现亮眼，人气飙升！';
+    }
   },
   {
     name:'品牌代言活动',icon:'💼',bg:'#fffbeb',
-    desc:'接受知名品牌代言，粉丝量决定代言费高低',
-    cost:0,artistCount:1,statHint:'粉丝量',
+    desc:'接受品牌代言，派出艺人的粉丝总量决定代言费',
+    cost:0,minArtists:1,statHint:'粉丝量',
     req:'需声望≥50 且出道艺人',
     check(){return G.fame>=50&&G.artists.some(a=>a.status==='已出道'||a.status==='工作中');},
     artistCheck(a){return a.status==='已出道'||a.status==='工作中';},
-    compute(sel){const a=sel[0];return{fame:Math.round(8+(a.fans||0)*0.1),money:Math.round(80+(a.fans||0)*1.5)};},
-    apply(sel,r){const a=sel[0];a.pr=Math.min(100,(a.pr||60)+5);return displayName(a)+' 成功代言，品牌曝光带来'+r.money+'万收益！';}
+    compute(sel){
+      const totalFans=sel.reduce((s,a)=>s+(a.fans||0),0);
+      return{fame:Math.round(8+totalFans*0.08),money:Math.round(60+totalFans*1.2)};
+    },
+    apply(sel,r){
+      sel.forEach(a=>{a.pr=Math.min(100,(a.pr||60)+5);});
+      return sel.map(displayName).join('、')+'成功代言，品牌曝光带来'+r.money+'万收益！';
+    }
   },
   {
     name:'演唱会巡演',icon:'🎪',bg:'#fdf4ff',
-    desc:'举办小型演唱会，唱跳实力决定票房与人气',
-    cost:50,artistCount:2,statHint:'唱+舞均值',
+    desc:'举办演唱会，多位艺人联合出演票房翻倍增长',
+    cost:50,minArtists:2,statHint:'唱+舞均值',
     req:'需出道艺人≥2 且声望≥80',
     check(){return G.artists.filter(a=>a.status==='已出道'||a.status==='工作中').length>=2&&G.fame>=80;},
     artistCheck(a){return a.status==='已出道'||a.status==='工作中';},
-    compute(sel){const avg=sel.reduce((s,a)=>s+(a.singing+a.dance)/2,0)/sel.length;return{fame:Math.round(50+avg*0.6),money:Math.round(150+avg*2)};},
-    apply(sel,r){sel.forEach(a=>{a.fans=Math.round((a.fans||0)+r.fame*0.6);a.pr=Math.min(100,(a.pr||60)+15);});return sel.map(displayName).join('、')+' 合力演出大获成功！';}
+    compute(sel){
+      const avg=sel.reduce((s,a)=>s+(a.singing+a.dance)/2,0)/sel.length;
+      const multi=1+0.4*(sel.length-1);
+      return{fame:Math.round((50+avg*0.6)*multi),money:Math.round((150+avg*2)*multi)};
+    },
+    apply(sel,r){
+      sel.forEach(a=>{a.fans=Math.round((a.fans||0)+r.fame*0.5);a.pr=Math.min(100,(a.pr||60)+12);});
+      return sel.map(displayName).join('、')+' 合力演出大获成功！';
+    }
   },
   {
     name:'颁奖典礼',icon:'🏆',bg:'#fff7ed',
-    desc:'参加年度娱乐颁奖典礼，综合实力角逐大奖',
-    cost:20,artistCount:1,statHint:'综合实力',
+    desc:'参加年度颁奖典礼，以最强阵容角逐大奖',
+    cost:20,minArtists:1,statHint:'综合实力',
     req:'需声望≥150 且出道艺人',
     check(){return G.fame>=150&&G.artists.some(a=>a.status==='已出道'||a.status==='工作中');},
     artistCheck(a){return a.status==='已出道'||a.status==='工作中';},
-    compute(sel){const a=sel[0];const s=(a.singing+a.dance+a.acting)/3;return{fame:Math.round(120+s*0.8),money:Math.round(60+s*0.5)};},
-    apply(sel,r){const a=sel[0];a.fans=Math.round((a.fans||0)+r.fame*0.4);a.pr=Math.min(100,(a.pr||60)+20);G.fame+=10;return displayName(a)+' 荣获年度大奖，公司声誉显著提升！';}
+    compute(sel){
+      const best=sel.reduce((b,a)=>{const sa=(a.singing+a.dance+a.acting)/3,sb=(b.singing+b.dance+b.acting)/3;return sa>sb?a:b;});
+      const s=(best.singing+best.dance+best.acting)/3;
+      const bonus=sel.length>1?(sel.length-1)*15:0;
+      return{fame:Math.round(120+s*0.8+bonus),money:Math.round(60+s*0.5+bonus*0.5)};
+    },
+    apply(sel,r){
+      sel.forEach(a=>{a.fans=Math.round((a.fans||0)+r.fame*0.3);a.pr=Math.min(100,(a.pr||60)+15);});
+      G.fame+=10;
+      const best=sel.reduce((b,a)=>{const sa=(a.singing+a.dance+a.acting)/3,sb=(b.singing+b.dance+b.acting)/3;return sa>sb?a:b;});
+      return displayName(best)+(sel.length>1?' 等'+sel.length+'人出席，':'')+'荣获年度大奖，公司声誉显著提升！';
+    }
   },
 ];
 
@@ -949,6 +987,7 @@ let contentArtistIdx=0, contentTypeId='single';
 function init(){
   const hasSave=loadGame();
   if(!G.usedEvents) G.usedEvents=[];
+  if(!G.usedEventArtists) G.usedEventArtists=[];
   if(!G.lastEvents) G.lastEvents=[];
   if(!G.monthlyHistory) G.monthlyHistory=[];
   if(!G.releases) G.releases=[];
@@ -1143,7 +1182,7 @@ function renderEvents(){
         <div class="event-name">${ev.name}</div>
         <div class="event-desc">${ev.desc}</div>
         <div style="font-size:11px;color:#999;margin-top:3px">📋 ${ev.req}${ev.cost>0?' · 报名费 '+ev.cost+'万':''}</div>
-        <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 派遣 ${ev.artistCount} 名艺人 · 关键属性：${ev.statHint}</div>
+        <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 至少 ${ev.minArtists} 名艺人，多派多得 · 关键属性：${ev.statHint}</div>
         <div class="event-reward" style="color:#666">🏅 声望  💰 收益（根据选派艺人实力动态计算）</div>
       </div>
       <button class="btn btn-sm ${ok&&!used?'btn-primary':''}" style="flex-shrink:0;align-self:center;white-space:nowrap" onclick="${ok&&!used?'openEventModal('+i+')':''}" ${used||!ok?'disabled':''}>
@@ -1160,7 +1199,7 @@ function openEventModal(i){
   document.getElementById('event-modal-title').textContent=ev.icon+' '+ev.name;
   document.getElementById('event-modal-desc').textContent=ev.desc;
   document.getElementById('event-modal-cost').textContent=ev.cost>0?'⚠️ 报名费用：'+ev.cost+' 万':'';
-  document.getElementById('event-select-hint').textContent='请选择 '+ev.artistCount+' 名艺人出战（关键属性：'+ev.statHint+'）';
+  document.getElementById('event-select-hint').textContent='至少选 '+ev.minArtists+' 名艺人出战，多派多得（关键属性：'+ev.statHint+'）';
   renderEventArtistList();
   updateEventOutcomePreview();
   document.getElementById('modal-event').classList.add('open');
@@ -1178,16 +1217,18 @@ function renderEventArtistList(){
   const el=document.getElementById('event-artist-list');
   const eligible=G.artists.filter(a=>ev.artistCheck(a));
   if(!eligible.length){
-    el.innerHTML='<div style="font-size:13px;color:#999;padding:8px 0">没有符合条件的艺人（需已出道或工作中）</div>';
+    el.innerHTML='<div style="font-size:13px;color:#999;padding:8px 0">没有符合条件的艺人</div>';
     return;
   }
   el.innerHTML=eligible.map(a=>{
     const ai=G.artists.indexOf(a);
     const sel=selectedEventArtists.includes(ai);
-    return `<div onclick="toggleEventArtist(${ai})" style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1.5px solid ${sel?'#1a1a1a':'#e8e5de'};border-radius:10px;cursor:pointer;margin-bottom:7px;background:${sel?'#f0ede6':'#fff'};transition:all .15s">
+    const busy=!sel&&(G.usedEventArtists||[]).includes(ai);
+    const clickable=!busy;
+    return `<div ${clickable?'onclick="toggleEventArtist('+ai+')"':''} style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1.5px solid ${sel?'#1a1a1a':'#e8e5de'};border-radius:10px;${clickable?'cursor:pointer;':'cursor:not-allowed;'}margin-bottom:7px;background:${sel?'#f0ede6':busy?'#fafafa':'#fff'};opacity:${busy?0.45:1};transition:all .15s">
       <div style="width:34px;height:34px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${a.abbr}</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+        <div style="font-size:13px;font-weight:600">${displayName(a)}${busy?'<span style="font-size:10px;color:#999;font-weight:400;margin-left:5px">本月已派出</span>':''}</div>
         <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">
           <span style="font-size:10px;color:#555;background:#e3f2fd;padding:1px 5px;border-radius:99px">唱${a.singing}</span>
           <span style="font-size:10px;color:#555;background:#fff8e1;padding:1px 5px;border-radius:99px">舞${a.dance}</span>
@@ -1196,24 +1237,19 @@ function renderEventArtistList(){
           <span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${prBg(a.pr||60)};color:${prColor(a.pr||60)}">舆${a.pr||60}</span>
         </div>
       </div>
-      <div style="font-size:20px">${sel?'✅':'⬜'}</div>
+      <div style="font-size:20px">${sel?'✅':busy?'🔒':'⬜'}</div>
     </div>`;
   }).join('');
 }
 
 function toggleEventArtist(ai){
   if(currentEventIdx<0) return;
-  const ev=EVENTS[currentEventIdx];
+  if((G.usedEventArtists||[]).includes(ai)) return;
   const idx=selectedEventArtists.indexOf(ai);
   if(idx>=0){
     selectedEventArtists.splice(idx,1);
   } else {
-    if(selectedEventArtists.length>=ev.artistCount){
-      if(ev.artistCount===1) selectedEventArtists=[ai];
-      else {toast('最多选 '+ev.artistCount+' 名艺人','error');return;}
-    } else {
-      selectedEventArtists.push(ai);
-    }
+    selectedEventArtists.push(ai);
   }
   renderEventArtistList();
   updateEventOutcomePreview();
@@ -1224,13 +1260,13 @@ function updateEventOutcomePreview(){
   const ev=EVENTS[currentEventIdx];
   const btn=document.getElementById('event-confirm-btn');
   const preview=document.getElementById('event-outcome-preview');
-  const ready=selectedEventArtists.length===ev.artistCount;
+  const ready=selectedEventArtists.length>=ev.minArtists;
   btn.disabled=!ready;
   if(ready){
     const sel=selectedEventArtists.map(i=>G.artists[i]);
     const r=ev.compute(sel);
     preview.style.display='';
-    preview.innerHTML=`<div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px">预计收益（基于所选艺人实力）</div>
+    preview.innerHTML=`<div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px">预计收益（已选 ${sel.length} 人）</div>
       <div style="display:flex;gap:20px">
         <span style="color:#2e7d32;font-weight:700;font-size:15px">⭐ +${r.fame} 声望</span>
         <span style="color:#1565c0;font-weight:700;font-size:15px">💰 +${r.money} 万</span>
@@ -1243,13 +1279,14 @@ function updateEventOutcomePreview(){
 function confirmEventWithArtists(){
   if(currentEventIdx<0) return;
   const ev=EVENTS[currentEventIdx];
-  if(selectedEventArtists.length!==ev.artistCount){toast('请选择 '+ev.artistCount+' 名艺人','error');return;}
+  if(selectedEventArtists.length<ev.minArtists){toast('至少选 '+ev.minArtists+' 名艺人','error');return;}
   if(G.usedEvents.includes(currentEventIdx)){toast('本月已参加过此活动','error');return;}
   if(!ev.check()){toast('条件不满足','error');return;}
   if(G.money<ev.cost){toast('资金不足！','error');return;}
   const sel=selectedEventArtists.map(i=>G.artists[i]);
   const r=ev.compute(sel);
   G.usedEvents.push(currentEventIdx);
+  selectedEventArtists.forEach(ai=>{if(!(G.usedEventArtists||[]).includes(ai)){(G.usedEventArtists=G.usedEventArtists||[]).push(ai);}});
   if(ev.cost>0){G.money-=ev.cost;addLog(ev.name+' 报名费','minus',ev.cost);}
   G.money+=r.money;
   G.fame+=r.fame;
@@ -1349,6 +1386,7 @@ function renderLastEvents(){
 function nextMonth(){
   G.month++;
   G.usedEvents=[];
+  G.usedEventArtists=[];
   let income=0,cost=0;
   const lv=G.buildings;
   if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
