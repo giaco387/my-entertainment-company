@@ -386,7 +386,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       <div class="modal-title" style="margin:0">招募练习生</div>
       <button class="btn btn-sm" onclick="closeRecruit()">✕</button>
     </div>
-    <div style="font-size:12px;color:#999;margin-bottom:12px">当前资金：<strong id="modal-money" style="color:#1a1a1a">1000</strong> 万 · 点击签约</div>
+    <div style="font-size:12px;color:#999;margin-bottom:10px">当前资金：<strong id="modal-money" style="color:#1a1a1a">1000</strong> 万</div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px;letter-spacing:.5px">合同时长</div>
+      <div style="display:flex;gap:6px">
+        <button id="cd-12" class="btn btn-sm" onclick="selectContractDuration(12)" style="flex:1;flex-direction:column;gap:1px">
+          <span style="font-size:12px;font-weight:600">12 个月</span>
+          <span style="font-size:10px;color:#2e7d32">费用 -25%</span>
+        </button>
+        <button id="cd-24" class="btn btn-sm btn-primary" onclick="selectContractDuration(24)" style="flex:1;flex-direction:column;gap:1px">
+          <span style="font-size:12px;font-weight:600">24 个月</span>
+          <span style="font-size:10px;opacity:.7">标准合同</span>
+        </button>
+        <button id="cd-36" class="btn btn-sm" onclick="selectContractDuration(36)" style="flex:1;flex-direction:column;gap:1px">
+          <span style="font-size:12px;font-weight:600">36 个月</span>
+          <span style="font-size:10px;color:#c62828">费用 +40%</span>
+        </button>
+      </div>
+    </div>
     <div id="recruit-list"></div>
   </div>
 </div>
@@ -1557,17 +1574,29 @@ function confirmEventWithArtists(){
   toast('🎉 '+ev.name+'成功！'+msg,'success');
 }
 
-function openRecruit(){
-  const maxArtists=2+G.buildings.office.lv*2;
-  if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
-  const signed=new Set(G.artists.map(a=>a.name));
-  const available=POOL.filter(p=>!signed.has(p.name));
-  if(!available.length){toast('所有练习生都已签约！','error');return;}
-  recruitPool=[...available].sort(()=>Math.random()-0.5).slice(0,hasAgent('scout')?6:4);
-  document.getElementById('modal-money').textContent=G.money;
+let recruitContractMonths=24;
+function contractCostMult(m){return m===12?0.75:m===36?1.4:1.0;}
+function calcRecruitCost(base){return Math.round(base*contractCostMult(recruitContractMonths));}
+
+function selectContractDuration(m){
+  recruitContractMonths=m;
+  [12,24,36].forEach(v=>{
+    const btn=document.getElementById('cd-'+v);
+    if(!btn) return;
+    const on=v===m;
+    btn.className='btn btn-sm'+(on?' btn-primary':'');
+    btn.style.flex='1';btn.style.flexDirection='column';btn.style.gap='1px';
+  });
+  renderRecruitList();
+}
+
+function renderRecruitList(){
   const el=document.getElementById('recruit-list');
-  el.innerHTML=recruitPool.map((p,i)=>`
-    <div class="recruit-item" onclick="recruit(${i})">
+  if(!recruitPool||!recruitPool.length) return;
+  el.innerHTML=recruitPool.map((p,i)=>{
+    const cost=calcRecruitCost(p.cost);
+    const affordable=G.money>=cost;
+    return `<div class="recruit-item" onclick="${affordable?'recruit('+i+')':''}" style="${affordable?'':'opacity:.45;cursor:not-allowed'}">
       <div class="avatar" style="background:${p.color};color:${p.tc};width:40px;height:40px">${p.abbr}</div>
       <div class="recruit-stats">
         <div class="recruit-name">${p.name} <span style="font-size:10px;background:#f5f4f0;padding:1px 6px;border-radius:99px;color:#666">${p.rarity}</span></div>
@@ -1578,9 +1607,20 @@ function openRecruit(){
           <div class="mini-bar-item">说<div class="mini-bar-bg"><div class="mini-bar-fill bar-pink" style="width:${p.rap}%"></div></div>${p.rap}</div>
         </div>
       </div>
-      <div class="cost-badge">${p.cost}万</div>
-    </div>
-  `).join('');
+      <div class="cost-badge" style="color:${affordable?'#1a1a1a':'#c62828'}">${cost}万</div>
+    </div>`;
+  }).join('');
+}
+
+function openRecruit(){
+  const maxArtists=2+G.buildings.office.lv*2;
+  if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
+  const signed=new Set(G.artists.map(a=>a.name));
+  const available=POOL.filter(p=>!signed.has(p.name));
+  if(!available.length){toast('所有练习生都已签约！','error');return;}
+  recruitPool=[...available].sort(()=>Math.random()-0.5).slice(0,hasAgent('scout')?6:4);
+  document.getElementById('modal-money').textContent=G.money;
+  selectContractDuration(recruitContractMonths);
   document.getElementById('modal-recruit').classList.add('open');
 }
 
@@ -1588,10 +1628,11 @@ function closeRecruit(){document.getElementById('modal-recruit').classList.remov
 
 function recruit(i){
   const p=recruitPool[i];
-  if(G.money<p.cost){toast('资金不足 '+p.cost+' 万！','error');return;}
-  G.money-=p.cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:p.cost,pr:60,contractEnd:G.month+24,lastFanOp:0});
-  addLog('签约'+p.name,'minus',p.cost);
+  const cost=calcRecruitCost(p.cost);
+  if(G.money<cost){toast('资金不足 '+cost+' 万！','error');return;}
+  G.money-=cost;
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:cost,pr:60,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
+  addLog('签约'+p.name+'（'+recruitContractMonths+'个月）','minus',cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();checkAchievements();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
 }
