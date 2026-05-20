@@ -552,6 +552,14 @@ function loadGame(){
   try{
     const saved=JSON.parse(raw);
     Object.assign(G, saved);
+    // 补全旧存档缺失的建筑
+    const defaultBuildings={
+      merch: {name:'周边商品部', lv:0, maxLv:4, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
+      media: {name:'媒体中心',   lv:0, maxLv:4, icon:'📡', cost:150, effect:'降低负面事件概率'},
+      health:{name:'健康管理中心',lv:0,maxLv:3, icon:'🏥', cost:100, effect:'防艺人停工'},
+      legal: {name:'法务部',     lv:0, maxLv:4, icon:'⚖️', cost:130, effect:'降低合同续签费'},
+    };
+    Object.entries(defaultBuildings).forEach(([k,v])=>{if(!G.buildings[k]) G.buildings[k]=v;});
     return true;
   }catch(e){return false;}
 }
