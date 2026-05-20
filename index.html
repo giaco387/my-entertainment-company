@@ -480,6 +480,7 @@ const G = {
   monthlyIncome: 0, monthlyCost: 0,
   activeTrends: [], agents: [], rivals: [],
   pendingEvents: [], pendingReleases: [],
+  buildingActions: {},
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
     practice: {name:'训练室',     lv:1, maxLv:5, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
@@ -1277,6 +1278,7 @@ function init(){
   if(!G.rivals) G.rivals=[];
   if(!G.pendingEvents) G.pendingEvents=[];
   if(!G.pendingReleases) G.pendingReleases=[];
+  if(!G.buildingActions) G.buildingActions={};
   G.artists.forEach(a=>{
     if(a.pr===undefined) a.pr=60;
     if(!a.contractEnd) a.contractEnd=G.month+24;
@@ -1436,26 +1438,116 @@ function setStatus(i,s){
   toast(displayName(G.artists[i])+' 状态已更新为「'+s+'」','success');
 }
 
+function getBuildingContrib(k,b){
+  if(b.lv===0) return null;
+  if(k==='live')     return `每月稳定收入 +${b.lv*18}万`;
+  if(k==='practice') return `训练效率 +${b.lv*20}%（当前${Math.round(b.lv*20)}%加成）`;
+  if(k==='studio'){
+    const can=['数字单曲'];
+    if(b.lv>=2) can.push('MV','纪录片');
+    if(b.lv>=3) can.push('实体专辑');
+    return '可发行：'+can.join(' / ');
+  }
+  if(k==='fanshall') return `公关见面会已解锁 · 艺人人气加成`;
+  if(k==='mv')       return `演出 & 内容发行收益 ×1.3`;
+  if(k==='office')   return `签约上限 ${2+b.lv*2}人（当前${G.artists.length}人）`;
+  return null;
+}
+
+function getBuildingActionCfg(k){
+  return {
+    live:     {label:'直播冲榜', cost:20,  desc:'额外获得本级双倍直播收入'},
+    practice: {label:'集中培训', cost:15,  desc:'所有训练中艺人全属性 +5'},
+    studio:   {label:'加急录制', cost:30,  desc:'最早的制作中内容立即完成'},
+    fanshall: {label:'明星签售', cost:20,  desc:'所有出道艺人粉丝+8%，舆论+15'},
+    mv:       {label:'精制特效', cost:35,  desc:'当前所有上线内容额外结算一次收益'},
+    office:   {label:'商务拓展', cost:0,   desc:'随机获得商务合作收益'},
+  }[k];
+}
+
+function doFacilityAction(k){
+  const b=G.buildings[k];
+  if(!b||b.lv===0){toast('请先建造该设施','error');return;}
+  if((G.buildingActions||{})[k]>=G.month){toast('本月已使用过该行动','error');return;}
+  const cfg=getBuildingActionCfg(k);
+  if(!cfg) return;
+  // 前置条件检查
+  if(k==='practice'&&!G.artists.some(a=>a.status==='训练中')){toast('当前没有训练中的艺人','error');return;}
+  if(k==='studio'&&!G.pendingReleases?.length){toast('当前没有制作中的内容','error');return;}
+  if(k==='fanshall'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(k==='mv'&&!G.releases?.length){toast('当前没有上线的内容','error');return;}
+  if(G.money<cfg.cost){toast('资金不足 '+cfg.cost+' 万','error');return;}
+  if(cfg.cost>0){G.money-=cfg.cost;addLog(b.name+'·'+cfg.label,'minus',cfg.cost);}
+  if(!G.buildingActions) G.buildingActions={};
+  G.buildingActions[k]=G.month;
+  let result='';
+  if(k==='live'){
+    const bonus=b.lv*18*2;
+    G.money+=bonus; addLog('直播冲榜收益','plus',bonus);
+    result='额外收益 +'+bonus+'万';
+  } else if(k==='practice'){
+    const list=G.artists.filter(a=>a.status==='训练中');
+    list.forEach(a=>{a.singing=Math.min(99,a.singing+5);a.dance=Math.min(99,a.dance+5);a.acting=Math.min(99,a.acting+3);});
+    result=list.length+'名艺人全属性 +5（+3演技）';
+  } else if(k==='studio'){
+    const target=G.pendingReleases.reduce((a,b)=>a.goLiveAt<b.goLiveAt?a:b);
+    target.goLiveAt=G.month;
+    result='「'+target.title+'」下月完成制作';
+  } else if(k==='fanshall'){
+    const list=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道');
+    list.forEach(a=>{a.fans=Math.round((a.fans||0)*1.08);a.pr=Math.min(100,(a.pr||60)+15);});
+    result=list.length+'名艺人粉丝+8%，舆论+15';
+  } else if(k==='mv'){
+    let bonus=0;
+    G.releases.forEach(r=>{
+      const age=G.month-r.releasedAt;
+      const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+      const g=Math.round(r.baseIncome*mult*0.5);
+      if(g>0){bonus+=g;}
+    });
+    if(bonus>0){G.money+=bonus;addLog('MV精制特效收益','plus',bonus);}
+    result='内容精制额外收益 +'+bonus+'万';
+  } else if(k==='office'){
+    const bonus=Math.round(20+Math.random()*40*b.lv);
+    G.money+=bonus; addLog('商务拓展收益','plus',bonus);
+    result='获得商务合作 +'+bonus+'万';
+  }
+  saveGame();renderBuildings();updateStats();updateOverview();
+  if(k==='practice'||k==='fanshall') renderArtistList();
+  toast('✨ '+cfg.label+'：'+result,'success');
+}
+
 function renderBuildings(){
   const el=document.getElementById('build-grid');
-  el.innerHTML=Object.entries(G.buildings).map(([k,b])=>`
+  el.innerHTML=Object.entries(G.buildings).map(([k,b])=>{
+    const contrib=getBuildingContrib(k,b);
+    const cfg=getBuildingActionCfg(k);
+    const used=(G.buildingActions||{})[k]>=G.month;
+    return `
     <div class="build-card">
       <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:38px;height:38px;border-radius:10px;background:#f5f4f0;display:flex;align-items:center;justify-content:center;font-size:18px">${b.icon}</div>
-        <div>
+        <div style="width:38px;height:38px;border-radius:10px;background:${b.lv>0?'#f0fdf4':'#f5f4f0'};display:flex;align-items:center;justify-content:center;font-size:18px">${b.icon}</div>
+        <div style="flex:1">
           <div style="font-size:13px;font-weight:600">${b.name}</div>
-          <div style="font-size:11px;color:#999">${b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv} · ${b.effect}</div>
+          <div style="font-size:11px;color:#999">${b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv}</div>
         </div>
       </div>
+      ${contrib?`<div style="font-size:11px;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 9px;border-radius:6px;font-weight:500">📊 ${contrib}</div>`
+               :`<div style="font-size:11px;color:#999;background:#f5f4f0;padding:5px 9px;border-radius:6px">${b.effect}</div>`}
       <div class="lv-bar"><div class="lv-fill" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
-          ${b.lv===0?'建造':'升级'} (${b.cost}万)
-        </button>
-        ${b.lv>0?`<button class="btn btn-sm" onclick="enterRoom('${k}')">进入 →</button>`:''}
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
+            ${b.lv===0?'建造':'升级'} (${b.cost}万)
+          </button>
+          ${b.lv>0?`<button class="btn btn-sm" onclick="enterRoom('${k}')">进入 →</button>`:''}
+        </div>
+        ${b.lv>0&&cfg?`<button class="btn btn-sm" style="justify-content:center;background:${used?'':'#fefce8'};border-color:${used?'':'#fde047'};color:${used?'':'#854d0e'}" onclick="doFacilityAction('${k}')" ${used?'disabled':''}>
+          ${used?'✅ 本月已行动':'⚡ '+cfg.label+(cfg.cost>0?' · '+cfg.cost+'万':' · 免费')}
+        </button>`:''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function upgradeBuilding(k){
