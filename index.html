@@ -228,15 +228,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <!-- 财务 -->
     <div class="section" id="section-finance">
       <div class="section-title">财务报表</div>
+      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">本月</div>
       <div class="cards-grid">
         <div class="metric-card"><div class="metric-label">总资金</div><div class="metric-val" id="fin-money">1000</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月收入</div><div class="metric-val" id="fin-income">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月支出</div><div class="metric-val" id="fin-cost">0</div><div class="metric-sub">万元</div></div>
-        <div class="metric-card"><div class="metric-label">净利润</div><div class="metric-val" id="fin-net">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">月净利润</div><div class="metric-val" id="fin-net">0</div><div class="metric-sub">万元</div></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin:16px 0 8px">本年累计（第 <span id="fin-year-label">1</span> 年）</div>
+      <div class="cards-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="metric-card"><div class="metric-label">年收入</div><div class="metric-val" id="fin-year-income">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">年支出</div><div class="metric-val" id="fin-year-cost">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">年净利润</div><div class="metric-val" id="fin-year-net" style="font-size:20px">0</div><div class="metric-sub">万元</div></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">📊 收支走势（近12月）</span></div>
+        <div id="finance-chart"><div style="font-size:13px;color:#999;padding:8px 0">还没有历史数据，点击「下一月」开始记录</div></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-head"><span class="card-title">🎤 艺人收支明细</span></div>
+        <div id="artist-finance-list"><div style="font-size:13px;color:#999">暂无艺人</div></div>
       </div>
       <div class="card">
         <div class="card-head"><span class="card-title">收支记录</span></div>
-        <div id="income-log" style="max-height:280px;overflow-y:auto"><div style="font-size:13px;color:#999">暂无记录</div></div>
+        <div id="income-log" style="max-height:240px;overflow-y:auto"><div style="font-size:13px;color:#999">暂无记录</div></div>
       </div>
     </div>
 
@@ -300,7 +315,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 <script>
 const G = {
   money: 1000, fame: 12, month: 1,
-  artists: [], log: [], usedEvents: [], lastEvents: [],
+  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [],
   monthlyIncome: 0, monthlyCost: 0,
   buildings: {
     live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
@@ -649,6 +664,7 @@ function init(){
   const hasSave=loadGame();
   if(!G.usedEvents) G.usedEvents=[];
   if(!G.lastEvents) G.lastEvents=[];
+  if(!G.monthlyHistory) G.monthlyHistory=[];
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   renderScene('overview');
@@ -828,7 +844,7 @@ function recruit(i){
   const p=recruitPool[i];
   if(G.money<p.cost){toast('资金不足 '+p.cost+' 万！','error');return;}
   G.money-=p.cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null});
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:p.cost});
   addLog('签约'+p.name,'minus',p.cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
@@ -904,14 +920,18 @@ function nextMonth(){
       else if(a.direction==='全能') base*=1.1;
       const g=Math.round(base*mvBonus);
       income+=g; a.fans=Math.round((a.fans||0)+g/8);
+      a.totalIncome=(a.totalIncome||0)+g;
       if(a.direction==='主持人') G.fame+=2;
       addLog(displayName(a)+' 演出收入','plus',g);
     }
-    if(a.status==='休息中') cost+=2;
+    if(a.status==='训练中') a.totalCost=(a.totalCost||0)+5;
+    if(a.status==='休息中'){cost+=2;a.totalCost=(a.totalCost||0)+2;}
   });
   G.money+=income-cost;
   G.monthlyIncome=income; G.monthlyCost=cost;
   G.fame+=Math.floor(income/25+1);
+  (G.monthlyHistory=G.monthlyHistory||[]).push({month:G.month,income,cost});
+  if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
   G.lastEvents=triggerMonthlyEvents();
   updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();
   const evMsg=G.lastEvents.length?' · '+G.lastEvents.length+'件事件':'';
@@ -963,7 +983,93 @@ function renderFinance(){
   document.getElementById('fin-money').textContent=G.money;
   document.getElementById('fin-income').textContent=G.monthlyIncome;
   document.getElementById('fin-cost').textContent=G.monthlyCost;
-  document.getElementById('fin-net').textContent=G.monthlyIncome-G.monthlyCost;
+  const netEl=document.getElementById('fin-net');
+  netEl.textContent=G.monthlyIncome-G.monthlyCost;
+  netEl.style.color=G.monthlyIncome-G.monthlyCost>=0?'#2e7d32':'#c62828';
+
+  // 年度统计
+  const curYear=Math.ceil(G.month/12)||1;
+  const yearStart=(curYear-1)*12+1;
+  document.getElementById('fin-year-label').textContent=curYear;
+  const yh=(G.monthlyHistory||[]).filter(h=>h.month>=yearStart);
+  const yInc=yh.reduce((s,h)=>s+h.income,0);
+  const yCost=yh.reduce((s,h)=>s+h.cost,0);
+  document.getElementById('fin-year-income').textContent=yInc;
+  document.getElementById('fin-year-cost').textContent=yCost;
+  const ynEl=document.getElementById('fin-year-net');
+  ynEl.textContent=yInc-yCost;
+  ynEl.style.color=yInc-yCost>=0?'#2e7d32':'#c62828';
+
+  // 收支走势图（近12月）
+  const chartEl=document.getElementById('finance-chart');
+  const hist=(G.monthlyHistory||[]).slice(-12);
+  if(!hist.length){
+    chartEl.innerHTML='<div style="font-size:13px;color:#999;padding:8px 0">还没有历史数据，点击「下一月」开始记录</div>';
+  } else {
+    const maxVal=Math.max(...hist.map(h=>Math.max(h.income,h.cost)),1);
+    const H=90;
+    chartEl.innerHTML=`
+      <div style="display:flex;align-items:flex-end;gap:3px;height:${H+28}px;padding:4px 0 0">
+        ${hist.map(h=>{
+          const ih=Math.max(3,Math.round(h.income/maxVal*H));
+          const ch=Math.max(3,Math.round(h.cost/maxVal*H));
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center">
+            <div style="width:100%;display:flex;align-items:flex-end;gap:1px;height:${H}px">
+              <div style="flex:1;background:linear-gradient(180deg,#4ade80,#16a34a);border-radius:3px 3px 0 0;height:${ih}px" title="收入 ${h.income}万"></div>
+              <div style="flex:1;background:linear-gradient(180deg,#fca5a5,#dc2626);border-radius:3px 3px 0 0;height:${ch}px" title="支出 ${h.cost}万"></div>
+            </div>
+            <div style="font-size:9px;color:#aaa;margin-top:4px">M${h.month}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:14px;justify-content:center;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555"><div style="width:10px;height:10px;border-radius:2px;background:#16a34a"></div>收入</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555"><div style="width:10px;height:10px;border-radius:2px;background:#dc2626"></div>支出</div>
+      </div>`;
+  }
+
+  // 艺人收支明细
+  const artEl=document.getElementById('artist-finance-list');
+  if(!G.artists.length){
+    artEl.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';
+  } else {
+    const sorted=[...G.artists].sort((a,b)=>((b.totalIncome||0)-(b.totalCost||0))-((a.totalIncome||0)-(a.totalCost||0)));
+    artEl.innerHTML=sorted.map((a,i)=>{
+      const inc=a.totalIncome||0;
+      const cost=a.totalCost||0;
+      const net=inc-cost;
+      const maxBar=Math.max(inc,cost,1);
+      return `<div style="padding:12px 0;${i<sorted.length-1?'border-bottom:1px solid #f0ede6':''}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div class="avatar" style="background:${a.color};color:${a.tc};width:34px;height:34px;font-size:12px">${a.abbr}</div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+            <span class="status-badge ${statusCls(a.status)}" style="font-size:10px">${a.status}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:${net>=0?'#2e7d32':'#c62828'}">${net>=0?'+':''}${net}万</div>
+            <div style="font-size:10px;color:#999">净贡献</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:10px;color:#2e7d32;font-weight:500;margin-bottom:3px">累计收入 ${inc}万</div>
+            <div style="height:5px;background:#f0ede6;border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:#16a34a;border-radius:99px;width:${Math.round(inc/maxBar*100)}%"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#c62828;font-weight:500;margin-bottom:3px">累计成本 ${cost}万</div>
+            <div style="height:5px;background:#f0ede6;border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:#dc2626;border-radius:99px;width:${Math.round(cost/maxBar*100)}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 收支记录
   const log=document.getElementById('income-log');
   if(!G.log.length){log.innerHTML='<div style="font-size:13px;color:#999">暂无记录</div>';return;}
   log.innerHTML=G.log.slice().reverse().map(l=>`
