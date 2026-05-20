@@ -104,6 +104,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .section{position:relative;min-height:100%}
 .scene-bg{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .section>*:not(.scene-bg){position:relative;z-index:1}
+#section-room .room-ui-layer{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;pointer-events:none}
+.room-topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(0,0,0,.45);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.1);pointer-events:all}
+.room-back-btn{background:rgba(255,255,255,.15)!important;color:#fff!important;border-color:rgba(255,255,255,.25)!important;pointer-events:all}
+.room-back-btn:hover{background:rgba(255,255,255,.28)!important}
+#room-icon-title{font-size:15px;font-weight:600;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+#room-lv-badge{font-size:11px;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(4px)}
+#room-artist-panel{margin-top:auto;padding:12px 16px;background:rgba(0,0,0,.52);backdrop-filter:blur(10px);border-top:1px solid rgba(255,255,255,.1);pointer-events:all}
+.room-artist-chip{display:inline-flex;flex-direction:column;align-items:center;gap:3px}
 .section.dark-scene .section-title{color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
 .section.dark-scene .tab{color:rgba(255,255,255,.45)}
 .section.dark-scene .tab.active{color:#fff;border-bottom-color:rgba(255,255,255,.8)}
@@ -218,6 +226,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   </div>
 </div>
 
+<!-- 设施室内视图 -->
+<div class="section" id="section-room">
+  <div class="room-ui-layer">
+    <div class="room-topbar">
+      <button class="btn btn-sm room-back-btn" onclick="exitRoom()">← 返回设施</button>
+      <div id="room-icon-title"></div>
+      <span id="room-lv-badge"></span>
+    </div>
+    <div id="room-artist-panel"></div>
+  </div>
+</div>
+
 <!-- 招募弹窗 -->
 <div class="modal-bg" id="modal-recruit">
   <div class="modal">
@@ -286,6 +306,158 @@ function newGame(){
   if(!confirm('确定开始新游戏吗？当前进度将清除！')) return;
   localStorage.removeItem('mec_save');
   location.reload();
+}
+
+function enterRoom(key){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('section-room').classList.add('active');
+  document.getElementById('nav-buildings').classList.add('active');
+  const b=G.buildings[key];
+  document.getElementById('room-icon-title').textContent=b.icon+' '+b.name;
+  document.getElementById('room-lv-badge').textContent='Lv.'+b.lv+'/'+b.maxLv;
+  const section=document.getElementById('section-room');
+  let bg=section.querySelector('.scene-bg');
+  if(!bg){bg=document.createElement('div');bg.className='scene-bg';section.insertBefore(bg,section.firstChild);}
+  bg.innerHTML=getRoomScene(key,b);
+  renderRoomArtistPanel();
+}
+
+function exitRoom(){showSection('buildings');}
+
+function renderRoomArtistPanel(){
+  const el=document.getElementById('room-artist-panel');
+  if(!G.artists.length){el.innerHTML='<div style="color:rgba(255,255,255,.38);font-size:12px">还没有签约艺人，前往艺人管理招募吧</div>';return;}
+  el.innerHTML=`<div style="font-size:10px;color:rgba(255,255,255,.4);margin-bottom:8px;font-weight:600;letter-spacing:.5px">在场艺人</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    ${G.artists.map(a=>`<div class="room-artist-chip">
+      <div style="width:38px;height:38px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid rgba(255,255,255,.35);box-shadow:0 2px 8px rgba(0,0,0,.4)">${a.abbr}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${a.name}</div>
+      <div class="status-badge ${statusCls(a.status)}" style="font-size:9px;padding:1px 5px">${a.status}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function roomSceneArtists(){
+  if(!G.artists.length) return `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,.22)">还没有艺人 ...</div>`;
+  const cnt=G.artists.length, sp=Math.min(88/(cnt+1),16);
+  return G.artists.map((a,i)=>{
+    const left=6+(i+1)*sp;
+    return `<div style="position:absolute;bottom:8px;left:${left}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div style="width:36px;height:36px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid rgba(255,255,255,.45);box-shadow:0 2px 10px rgba(0,0,0,.5)">${a.abbr}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.75);white-space:nowrap">${a.name}</div>
+    </div>`;
+  }).join('');
+}
+
+function getRoomScene(key,b){
+  return {live:sceneRoomLive,practice:sceneRoomPractice,studio:sceneRoomStudio,fanshall:sceneRoomFanshall,mv:sceneRoomMv,office:sceneRoomOffice}[key]?.(b)||'';
+}
+
+function sceneRoomLive(b){
+  const n=Math.min(b.lv,3)||1;
+  const screens=Array(n).fill(0).map((_,i)=>{
+    const l=n===1?35:8+i*(84/n), w=Math.floor(80/n-4);
+    return `<div style="position:absolute;top:12%;left:${l}%;width:${w}%;height:28%;background:#050e20;border:3px solid #1d4ed8;border-radius:6px;box-shadow:0 0 24px rgba(59,130,246,.35);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px"><div style="font-size:24px">${['📊','🎬','📈'][i]}</div><div style="width:55%;height:3px;background:rgba(59,130,246,.4);border-radius:2px"></div><div style="width:38%;height:2px;background:rgba(59,130,246,.2);border-radius:2px"></div></div>`;
+  }).join('');
+  const rings=[20,50,80].map(l=>`<div style="position:absolute;top:7%;left:${l}%;transform:translateX(-50%);width:54px;height:54px;border-radius:50%;border:6px solid rgba(255,255,255,.12);box-shadow:0 0 18px rgba(255,255,255,.1)"></div>`).join('');
+  const artists=roomSceneArtists();
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#020917 0%,#060d24 45%,#040b1c 100%)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#2563eb,#4f46e5,#7c3aed,#4f46e5,#2563eb)"></div>
+  ${screens}${rings}
+  <div style="position:absolute;top:12%;right:7%;padding:4px 10px;background:#dc2626;border-radius:4px;font-size:11px;font-weight:700;color:#fff;letter-spacing:1px;box-shadow:0 0 10px rgba(220,38,38,.5)">● LIVE</div>
+  <div style="position:absolute;bottom:24%;right:8%;font-size:32px;opacity:.7">📷</div>
+  <div style="position:absolute;bottom:22%;left:20%;right:20%;height:36px;background:linear-gradient(180deg,#1e293b,#0f172a);border-radius:8px 8px 0 0;border-top:2px solid #334155;display:flex;align-items:center;justify-content:space-evenly;font-size:15px">🖥️ 🎙️ 🎚️</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#0f1b30,#060d1c);border-top:2px solid rgba(59,130,246,.2)">${artists}</div>`;
+}
+
+function sceneRoomPractice(b){
+  const mc=Math.min(Math.max(b.lv+2,3),6);
+  const mirrors=Array(mc).fill(0).map((_,i)=>`<div style="position:absolute;top:4%;left:${3+i*(94/mc)}%;width:${90/mc-1}%;height:52%;background:linear-gradient(135deg,rgba(220,240,255,.88),rgba(180,215,255,.65),rgba(220,240,255,.88));border:3px solid rgba(200,225,245,.7);border-radius:3px;box-shadow:inset 0 2px 8px rgba(255,255,255,.9)"></div>`).join('');
+  const artists=roomSceneArtists();
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#eef4ff 0%,#e0eafb 50%,#c5d8a0 100%)"></div>
+  ${mirrors}
+  <div style="position:absolute;top:58%;left:4%;right:4%;height:4px;background:linear-gradient(90deg,rgba(120,80,40,.18),rgba(120,80,40,.52),rgba(120,80,40,.18));border-radius:2px"></div>
+  <div style="position:absolute;bottom:21%;left:8%;right:8%;height:2px;border:2px dashed rgba(180,140,80,.32);border-radius:1px"></div>
+  <div style="position:absolute;bottom:22%;right:5%;font-size:26px;opacity:.4">🎵</div>
+  <div style="position:absolute;bottom:22%;left:5%;font-size:22px;opacity:.38">💧</div>
+  <div style="position:absolute;top:3%;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(60,80,120,.4);font-weight:600;letter-spacing:1.5px;white-space:nowrap">TRAINING STUDIO</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#c9a96e,#a67c4e)">
+    <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,transparent,transparent 55px,rgba(0,0,0,.04) 55px,rgba(0,0,0,.04) 57px)"></div>
+    ${artists}
+  </div>`;
+}
+
+function sceneRoomStudio(b){
+  const panels=Array(14).fill(0).map((_,i)=>`<div style="position:absolute;top:0;left:${i*(100/14)}%;width:${100/14}%;height:60%;background:${i%2===0?'rgba(80,50,20,.22)':'rgba(55,32,10,.14)'};border-right:1px solid rgba(100,60,20,.09)"></div>`).join('');
+  const kc=['#ef4444','#f59e0b','#22c55e','#3b82f6','#8b5cf6','#ec4899'];
+  const knobs=Array(12).fill(0).map((_,i)=>`<div style="width:8px;height:8px;border-radius:50%;background:${kc[i%6]}"></div>`).join('');
+  const sliders=Array(6).fill(0).map((_,i)=>`<div style="width:3px;height:18px;background:rgba(255,255,255,.12);border-radius:2px;position:relative"><div style="position:absolute;top:${20+i*9}%;width:10px;height:4px;background:#94a3b8;border-radius:1px;left:-3.5px"></div></div>`).join('');
+  const artists=roomSceneArtists();
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#120a02 0%,#1f1108 40%,#160d04 100%)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#92400e,#f59e0b,#92400e)"></div>
+  ${panels}
+  <div style="position:absolute;top:8%;left:28%;right:28%;height:43%;background:linear-gradient(135deg,rgba(100,150,200,.12),rgba(80,120,180,.22));border:3px solid rgba(150,180,220,.2);border-radius:4px;box-shadow:0 0 30px rgba(100,150,200,.08)"></div>
+  <div style="position:absolute;bottom:22%;left:14%;right:14%;height:44px;background:linear-gradient(180deg,#2a2a2a,#1a1a1a);border-radius:8px 8px 0 0;border-top:2px solid #444;padding:0 12px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;gap:4px">${knobs}</div><div style="display:flex;gap:7px;align-items:center">${sliders}</div>
+  </div>
+  <div style="position:absolute;bottom:24%;left:10%;font-size:28px;opacity:.8">🎙️</div>
+  <div style="position:absolute;top:63%;right:6%;font-size:26px;opacity:.6">🎸</div>
+  <div style="position:absolute;top:63%;right:14%;font-size:24px;opacity:.5">🎹</div>
+  <div style="position:absolute;bottom:23%;right:11%;font-size:22px;opacity:.6">🎧</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#2d1a08,#1a0f04);border-top:2px solid rgba(245,158,11,.12)">${artists}</div>`;
+}
+
+function sceneRoomFanshall(b){
+  const rows=Math.min(b.lv+1,3);
+  const fans=Array(rows).fill(0).map((_,row)=>`<div style="position:absolute;bottom:${46+row*11}%;left:4%;right:4%;display:flex;justify-content:space-evenly">${Array(14).fill(0).map(()=>`<div style="font-size:${9+row*2}px;opacity:${.33+row*.12}">😊</div>`).join('')}</div>`).join('');
+  const artists=roomSceneArtists();
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#180420 0%,#2d0a38 45%,#3d1250 100%)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#db2777,#9333ea,#ec4899,#9333ea,#db2777)"></div>
+  <div style="position:absolute;top:0;left:0;width:11%;height:62%;background:linear-gradient(90deg,rgba(120,0,60,.8),rgba(80,0,40,.5));border-right:3px solid rgba(200,50,100,.16)"></div>
+  <div style="position:absolute;top:0;right:0;width:11%;height:62%;background:linear-gradient(270deg,rgba(120,0,60,.8),rgba(80,0,40,.5));border-left:3px solid rgba(200,50,100,.16)"></div>
+  <div style="position:absolute;top:0;left:20%;right:20%;height:60%;background:radial-gradient(ellipse at 50% -10%,rgba(236,72,153,.2) 0%,transparent 70%)"></div>
+  <div style="position:absolute;top:4%;left:13%;font-size:18px;opacity:.62">🌸</div>
+  <div style="position:absolute;top:4%;right:13%;font-size:18px;opacity:.62">🌸</div>
+  ${fans}
+  <div style="position:absolute;bottom:22%;left:0;right:0;height:3px;background:rgba(236,72,153,.22)"></div>
+  <div style="position:absolute;bottom:20%;left:18%;right:18%;height:28px;background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.06));border-radius:5px 5px 0 0;border-top:2px solid rgba(255,255,255,.22);display:flex;align-items:center;justify-content:space-evenly;font-size:14px">💐 ✏️ 📸</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#3d0a28,#230615);border-top:2px solid rgba(236,72,153,.16)">${artists}</div>`;
+}
+
+function sceneRoomMv(b){
+  const bgC=['#7c3aed','#e11d48','#0284c7','#059669','#d97706'][b.lv%5];
+  const artists=roomSceneArtists();
+  const stand=(l)=>`<div style="position:absolute;bottom:24%;left:${l}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center"><div style="width:44px;height:6px;background:rgba(255,255,255,.55);border-radius:2px;box-shadow:0 0 14px rgba(255,255,255,.4)"></div><div style="width:2px;height:60px;background:rgba(255,255,255,.22)"></div><div style="width:12px;height:12px;background:rgba(255,255,255,.14);border-radius:2px"></div></div>`;
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#0a0a0a 0%,#111 40%,#080808 100%)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,${bgC},#fff,${bgC})"></div>
+  <div style="position:absolute;top:5%;left:10%;right:10%;height:54%;background:linear-gradient(135deg,${bgC}22,${bgC}55,${bgC}22);border-radius:4px"></div>
+  <div style="position:absolute;top:0;left:25%;right:25%;height:55%;background:radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.14) 0%,transparent 65%)"></div>
+  ${stand(15)}${stand(85)}
+  <div style="position:absolute;bottom:25%;left:50%;transform:translateX(-50%);font-size:34px;opacity:.75">🎬</div>
+  <div style="position:absolute;top:9%;left:7%;font-size:26px;opacity:.65">🎬</div>
+  <div style="position:absolute;bottom:24%;right:7%;font-size:24px;opacity:.6">🪑</div>
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#181818,#0a0a0a);border-top:1px solid rgba(255,255,255,.07)">${artists}</div>`;
+}
+
+function sceneRoomOffice(b){
+  const dc=Math.min(Math.max(b.lv,2),4);
+  const desks=Array(dc).fill(0).map((_,i)=>`<div style="position:absolute;bottom:22%;left:${6+i*(90/dc)}%;width:${86/dc-2}%;height:26px;background:linear-gradient(180deg,#e2e8f0,#cbd5e1);border-radius:4px 4px 0 0;border-top:2px solid #94a3b8;display:flex;align-items:center;justify-content:center;font-size:12px">💻</div>`).join('');
+  const artists=roomSceneArtists();
+  return `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#f0f9ff 0%,#e0f2fe 50%,#bae6fd 100%)"></div>
+  <div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#0ea5e9,#6366f1,#0ea5e9)"></div>
+  <div style="position:absolute;top:5%;left:5%;right:5%;height:50%;background:rgba(255,255,255,.55);border-radius:4px;border:1px solid rgba(200,220,240,.5);display:flex;flex-direction:column;justify-content:center;padding:12px 16px;gap:6px;overflow:hidden">
+    <div style="font-size:11px;color:rgba(60,80,120,.5);font-weight:600;margin-bottom:2px">📋 月度计划</div>
+    ${Array(4).fill(0).map((_,i)=>`<div style="height:2px;background:rgba(100,150,200,${.22-i*.04});border-radius:1px;width:${90-i*12}%"></div>`).join('')}
+    <div style="position:absolute;top:10%;right:8%;font-size:22px;opacity:.32">📊</div>
+    <div style="position:absolute;top:10%;right:19%;font-size:18px;opacity:.28">📈</div>
+  </div>
+  <div style="position:absolute;top:8%;left:36%;right:36%;height:47%;background:linear-gradient(180deg,rgba(255,255,255,.6),transparent);border-left:3px solid rgba(200,220,240,.4);border-right:3px solid rgba(200,220,240,.4)"></div>
+  <div style="position:absolute;bottom:22%;left:2%;font-size:26px;opacity:.52">🪴</div>
+  <div style="position:absolute;bottom:22%;right:2%;font-size:22px;opacity:.48">🌿</div>
+  <div style="position:absolute;top:5%;right:3%;font-size:20px;opacity:.42">☕</div>
+  ${desks}
+  <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,#cbd5e1,#94a3b8);border-top:2px solid rgba(100,130,180,.22)">${artists}</div>`;
 }
 
 function renderScene(id){
@@ -489,9 +661,12 @@ function renderBuildings(){
         </div>
       </div>
       <div class="lv-bar"><div class="lv-fill" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
-      <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
-        ${b.lv===0?'建造':'升级'} (${b.cost}万)
-      </button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
+          ${b.lv===0?'建造':'升级'} (${b.cost}万)
+        </button>
+        ${b.lv>0?`<button class="btn btn-sm" onclick="enterRoom('${k}')">进入 →</button>`:''}
+      </div>
     </div>
   `).join('');
 }
