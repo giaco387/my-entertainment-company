@@ -1,0 +1,28 @@
+// 市场趋势池（随机触发，每月最多3条活跃）
+// duration: 持续月数  bad: 是否为负面趋势
+const TREND_POOL = [
+  { id:'rap_hot',       name:'说唱文化崛起',    icon:'🔥', cat:'内容热点', duration:3, bad:false,
+    desc:'说唱题材内容收益+50%，rap属性≥60的艺人演出额外+30%' },
+  { id:'idol_boom',     name:'偶像综艺热潮',    icon:'⭐', cat:'活动',   duration:2, bad:false,
+    desc:'新人选秀综艺奖励+50%' },
+  { id:'streaming_rise',name:'流媒体使用率攀升', icon:'📱', cat:'内容',   duration:3, bad:false,
+    desc:'单曲/专辑发行收益+40%' },
+  { id:'concert_craze', name:'线下演出热度回暖', icon:'🎪', cat:'活动',   duration:2, bad:false,
+    desc:'演唱会巡演奖励+50%' },
+  { id:'acting_trend',  name:'影视剧爆发式增长', icon:'🎬', cat:'艺人',   duration:3, bad:false,
+    desc:'演技≥70的艺人演出收益+40%' },
+  { id:'ad_market_up',  name:'广告市场景气',    icon:'💼', cat:'商务',   duration:2, bad:false,
+    desc:'品牌代言活动奖励+60%' },
+  { id:'training_boost',name:'精英训练营热度',   icon:'🎓', cat:'艺人',   duration:2, bad:false,
+    desc:'本月训练效率额外+40%' },
+  { id:'music_award',   name:'年度音乐颁奖季',   icon:'🏆', cat:'活动',   duration:1, bad:false,
+    desc:'颁奖典礼声望奖励+80%' },
+  { id:'social_viral',  name:'社交媒体传播热潮', icon:'💬', cat:'运营',   duration:2, bad:false,
+    desc:'粉丝运营所有行动效果+50%' },
+  { id:'economy_down',  name:'广告市场下行',     icon:'📉', cat:'市场寒冬',duration:2, bad:true,
+    desc:'演出收益整体-25%' },
+  { id:'scandal_season',name:'行业集中曝光期',   icon:'📸', cat:'危机',   duration:1, bad:true,
+    desc:'艺人负面随机事件概率翻倍' },
+  { id:'platform_fee',  name:'平台提高内容抽成', icon:'🖥️', cat:'内容',  duration:2, bad:true,
+    desc:'所有内容发行收益-30%' },
+];
