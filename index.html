@@ -118,6 +118,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     <div class="stat">💰 <strong id="money">1000</strong> 万</div>
     <div class="stat">⭐ 声望 <strong id="fame">12</strong></div>
     <div class="stat">📅 第 <strong id="month">1</strong> 月</div>
+    <button class="btn-next" style="background:#fff;color:#1a1a1a;border:1px solid #d0cec7;margin-right:6px" onclick="newGame()">↺ 新游戏</button>
     <button class="btn-next" onclick="nextMonth()">▶ 下一月</button>
   </div>
 </div>
@@ -259,7 +260,32 @@ const EVENTS = [
 
 let recruitPool=[], artistTabCur='roster';
 
-function init(){renderBuildings();renderEvents();updateOverview();updateSidebar();}
+function saveGame(){
+  localStorage.setItem('mec_save', JSON.stringify(G));
+}
+
+function loadGame(){
+  const raw=localStorage.getItem('mec_save');
+  if(!raw) return false;
+  try{
+    const saved=JSON.parse(raw);
+    Object.assign(G, saved);
+    return true;
+  }catch(e){return false;}
+}
+
+function newGame(){
+  if(!confirm('确定开始新游戏吗？当前进度将清除！')) return;
+  localStorage.removeItem('mec_save');
+  location.reload();
+}
+
+function init(){
+  const hasSave=loadGame();
+  renderBuildings();renderEvents();updateOverview();updateSidebar();
+  if(G.artists.length) renderArtistList();
+  if(hasSave) toast('读取存档成功，继续上次游戏','success');
+}
 
 function showSection(id){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
@@ -323,7 +349,7 @@ function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'
 
 function setStatus(i,s){
   G.artists[i].status=s;
-  renderArtistList();renderTrainList();
+  renderArtistList();renderTrainList();saveGame();
   toast(G.artists[i].name+' 状态已更新为「'+s+'」','success');
 }
 
@@ -353,7 +379,7 @@ function upgradeBuilding(k){
   const paid=b.cost;
   G.money-=paid; b.lv++; b.cost=Math.round(b.cost*1.5);
   addLog((b.lv===1?'建造':'升级')+b.name,'minus',paid);
-  renderBuildings();updateStats();updateOverview();
+  renderBuildings();updateStats();updateOverview();saveGame();
   toast(b.name+(b.lv===1?' 建造完成！':' 升级至 Lv.'+b.lv+'！'),'success');
 }
 
@@ -381,14 +407,17 @@ function joinEvent(i){
   if(ev.cost>0) addLog(ev.name+' 报名费','minus',ev.cost);
   addLog(ev.name+' 奖励','plus',ev.moneyGain);
   G.artists.forEach(a=>{if(a.status==='工作中'||a.status==='已出道') a.fans=Math.round((a.fans||0)+ev.fameGain/10);});
-  updateStats();updateOverview();updateTips();
+  updateStats();updateOverview();updateTips();saveGame();
   toast('活动成功！声望+'+ev.fameGain+'，收入+'+ev.moneyGain+'万','success');
 }
 
 function openRecruit(){
   const maxArtists=2+G.buildings.office.lv*2;
   if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
-  recruitPool=[...POOL].sort(()=>Math.random()-0.5).slice(0,4);
+  const signed=new Set(G.artists.map(a=>a.name));
+  const available=POOL.filter(p=>!signed.has(p.name));
+  if(!available.length){toast('所有练习生都已签约！','error');return;}
+  recruitPool=[...available].sort(()=>Math.random()-0.5).slice(0,4);
   document.getElementById('modal-money').textContent=G.money;
   const el=document.getElementById('recruit-list');
   el.innerHTML=recruitPool.map((p,i)=>`
@@ -417,7 +446,7 @@ function recruit(i){
   G.money-=p.cost;
   G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1)});
   addLog('签约'+p.name,'minus',p.cost);
-  updateStats();renderArtistList();updateOverview();updateSidebar();closeRecruit();
+  updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
 }
 
@@ -446,7 +475,7 @@ function nextMonth(){
   G.money+=income-cost;
   G.monthlyIncome=income; G.monthlyCost=cost;
   G.fame+=Math.floor(income/25+1);
-  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();
+  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();saveGame();
   toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万','success');
 }
 
