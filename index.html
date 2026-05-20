@@ -112,6 +112,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 #room-lv-badge{font-size:11px;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(4px)}
 #room-artist-panel{margin-top:auto;padding:12px 16px;background:rgba(0,0,0,.52);backdrop-filter:blur(10px);border-top:1px solid rgba(255,255,255,.1);pointer-events:all}
 .room-artist-chip{display:inline-flex;flex-direction:column;align-items:center;gap:3px}
+.alias-edit-btn{background:none;border:none;cursor:pointer;font-size:11px;color:#bbb;padding:1px 3px;border-radius:4px;line-height:1}
+.alias-edit-btn:hover{background:#f0ede6;color:#666}
+.direction-badge{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600}
+.dir-singer{background:#dbeafe;color:#1e40af}
+.dir-actor{background:#dcfce7;color:#14532d}
+.dir-host{background:#fff8e1;color:#92400e}
+.dir-allround{background:#fce7f3;color:#831843}
+.direction-card{padding:12px;border:2px solid #e8e5de;border-radius:10px;cursor:pointer;transition:all .15s;margin-bottom:8px;display:flex;align-items:flex-start;gap:10px}
+.direction-card:hover{border-color:#aaa;background:#fafafa}
+.direction-card.selected{border-color:#1a1a1a;background:#f0ede6}
+#alias-input{width:100%;padding:8px 12px;border:1px solid #d0cec7;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit}
+#alias-input:focus{border-color:#1a1a1a;box-shadow:0 0 0 2px rgba(26,26,26,.1)}
 .section.dark-scene .section-title{color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
 .section.dark-scene .tab{color:rgba(255,255,255,.45)}
 .section.dark-scene .tab.active{color:#fff;border-bottom-color:rgba(255,255,255,.8)}
@@ -250,6 +262,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   </div>
 </div>
 
+<!-- 艺名编辑弹窗 -->
+<div class="modal-bg" id="modal-alias">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0" id="alias-modal-title">设置艺名</div>
+      <button class="btn btn-sm" onclick="closeAliasEdit()">✕</button>
+    </div>
+    <div style="font-size:12px;color:#999;margin-bottom:12px">留空则恢复使用本名</div>
+    <input id="alias-input" type="text" placeholder="请输入艺名…" maxlength="10">
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-sm" onclick="closeAliasEdit()">取消</button>
+      <button class="btn btn-sm btn-primary" onclick="saveAlias()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- 发展方向弹窗 -->
+<div class="modal-bg" id="modal-direction">
+  <div class="modal" style="width:360px;max-width:94vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="modal-title" style="margin:0">选择发展方向</div>
+      <button class="btn btn-sm" onclick="closeDirectionSelect()">✕</button>
+    </div>
+    <div style="font-size:12px;color:#999;margin-bottom:14px" id="direction-artist-name"></div>
+    <div id="direction-options"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -287,6 +327,56 @@ const EVENTS = [
 ];
 
 let recruitPool=[], artistTabCur='roster';
+let currentAliasIdx=-1, currentDirIdx=-1;
+
+const DIRECTIONS=[
+  {id:'歌手', icon:'🎤', color:'#dbeafe', tc:'#1e40af', desc:'专注音乐，演出收入+25%（唱技≥70时生效）'},
+  {id:'演员', icon:'🎭', color:'#dcfce7', tc:'#14532d', desc:'影视接单，演技加成+25%（演技≥70时生效）'},
+  {id:'主持人', icon:'📺', color:'#fff8e1', tc:'#92400e', desc:'综艺节目常驻，每月额外+2声望'},
+  {id:'全能', icon:'⭐', color:'#fce7f3', tc:'#831843', desc:'均衡发展，综合演出收入+10%'},
+];
+
+function displayName(a){return a.alias||a.name;}
+function dirClass(d){return {'歌手':'singer','演员':'actor','主持人':'host','全能':'allround'}[d]||'';}
+function dirIcon(d){return {'歌手':'🎤','演员':'🎭','主持人':'📺','全能':'⭐'}[d]||'';}
+
+function openAliasEdit(i){
+  currentAliasIdx=i;
+  const a=G.artists[i];
+  document.getElementById('alias-modal-title').textContent='为「'+a.name+'」设置艺名';
+  document.getElementById('alias-input').value=a.alias||'';
+  document.getElementById('modal-alias').classList.add('open');
+  setTimeout(()=>document.getElementById('alias-input').focus(),50);
+}
+function closeAliasEdit(){document.getElementById('modal-alias').classList.remove('open');}
+function saveAlias(){
+  if(currentAliasIdx<0) return;
+  const val=document.getElementById('alias-input').value.trim();
+  G.artists[currentAliasIdx].alias=val;
+  closeAliasEdit();
+  saveGame();renderArtistList();maybeRefreshArtistScene();
+  toast(val?'已设置艺名「'+val+'」':'已清除艺名','success');
+}
+
+function openDirectionSelect(i){
+  currentDirIdx=i;
+  const a=G.artists[i];
+  document.getElementById('direction-artist-name').textContent='为「'+displayName(a)+'」选择发展方向';
+  document.getElementById('direction-options').innerHTML=DIRECTIONS.map(d=>`
+    <div class="direction-card ${a.direction===d.id?'selected':''}" onclick="selectDirection('${d.id}')">
+      <div style="width:40px;height:40px;border-radius:10px;background:${d.color};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${d.icon}</div>
+      <div><div style="font-size:13px;font-weight:600;color:#1a1a1a">${d.id}</div><div style="font-size:11px;color:#666;margin-top:3px">${d.desc}</div></div>
+    </div>`).join('');
+  document.getElementById('modal-direction').classList.add('open');
+}
+function closeDirectionSelect(){document.getElementById('modal-direction').classList.remove('open');}
+function selectDirection(d){
+  if(currentDirIdx<0) return;
+  G.artists[currentDirIdx].direction=d;
+  closeDirectionSelect();
+  saveGame();renderArtistList();
+  toast('已选择发展方向：'+dirIcon(d)+' '+d,'success');
+}
 
 function saveGame(){
   localStorage.setItem('mec_save', JSON.stringify(G));
@@ -332,7 +422,7 @@ function renderRoomArtistPanel(){
   <div style="display:flex;flex-wrap:wrap;gap:10px">
     ${G.artists.map(a=>`<div class="room-artist-chip">
       <div style="width:38px;height:38px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid rgba(255,255,255,.35);box-shadow:0 2px 8px rgba(0,0,0,.4)">${a.abbr}</div>
-      <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${a.name}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
       <div class="status-badge ${statusCls(a.status)}" style="font-size:9px;padding:1px 5px">${a.status}</div>
     </div>`).join('')}
   </div>`;
@@ -345,7 +435,7 @@ function roomSceneArtists(){
     const left=6+(i+1)*sp;
     return `<div style="position:absolute;bottom:8px;left:${left}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px">
       <div style="width:36px;height:36px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid rgba(255,255,255,.45);box-shadow:0 2px 10px rgba(0,0,0,.5)">${a.abbr}</div>
-      <div style="font-size:8px;color:rgba(255,255,255,.75);white-space:nowrap">${a.name}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
     </div>`;
   }).join('');
 }
@@ -507,7 +597,7 @@ function sceneArtists(){
       const left=6+(i+1)*sp;
       avatars+=`<div style="position:absolute;bottom:8px;left:${left}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px">
         <div style="width:38px;height:38px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid rgba(255,255,255,.5);box-shadow:0 0 14px rgba(255,210,60,.6)">${a.abbr}</div>
-        <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${a.name}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
       </div>`;
     });
   }
@@ -607,13 +697,19 @@ function renderArtistList(){
     <div class="artist-row">
       <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
       <div class="artist-info">
-        <div class="artist-name">${a.name}</div>
+        <div class="artist-name" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span>${displayName(a)}</span>
+          ${a.alias?`<span style="font-size:10px;color:#bbb;font-weight:400">${a.name}</span>`:''}
+          <button class="alias-edit-btn" onclick="openAliasEdit(${i})">✏️</button>
+        </div>
         <div class="artist-tags">
           ${a.singing>60?'<span class="tag singing">唱</span>':''}
           ${a.dance>60?'<span class="tag dance">舞</span>':''}
           ${a.acting>60?'<span class="tag acting">演</span>':''}
           ${a.rap>60?'<span class="tag rap">说唱</span>':''}
           <span class="status-badge ${statusCls(a.status)}">${a.status}</span>
+          ${a.direction?`<span class="direction-badge dir-${dirClass(a.direction)}">${dirIcon(a.direction)} ${a.direction}</span>`:''}
+          ${a.status==='已出道'?`<button class="btn btn-sm" style="font-size:10px;padding:2px 7px;height:auto;line-height:1.6" onclick="openDirectionSelect(${i})">${a.direction?'换方向':'选方向'}</button>`:''}
         </div>
       </div>
       <div style="flex:1;max-width:130px">
@@ -631,7 +727,7 @@ function renderTrainList(){
   el.innerHTML=G.artists.map((a,i)=>`
     <div class="artist-row">
       <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${a.name}</div><div style="font-size:11px;color:#999;margin-top:2px">当前: ${a.status}</div></div>
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${displayName(a)}</div><div style="font-size:11px;color:#999;margin-top:2px">当前: ${a.status}</div></div>
       <div style="display:flex;gap:5px">
         <button class="btn btn-sm" onclick="setStatus(${i},'训练中')" ${a.status==='训练中'?'disabled':''}>训练</button>
         <button class="btn btn-sm btn-success" onclick="setStatus(${i},'工作中')" ${a.status==='工作中'?'disabled':''}>接工作</button>
@@ -646,7 +742,7 @@ function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'
 function setStatus(i,s){
   G.artists[i].status=s;
   renderArtistList();renderTrainList();saveGame();
-  toast(G.artists[i].name+' 状态已更新为「'+s+'」','success');
+  toast(displayName(G.artists[i])+' 状态已更新为「'+s+'」','success');
 }
 
 function renderBuildings(){
@@ -749,7 +845,7 @@ function recruit(i){
   const p=recruitPool[i];
   if(G.money<p.cost){toast('资金不足 '+p.cost+' 万！','error');return;}
   G.money-=p.cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1)});
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null});
   addLog('签约'+p.name,'minus',p.cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
@@ -767,14 +863,19 @@ function nextMonth(){
       a.singing=Math.min(99,a.singing+Math.round(Math.random()*3*eff));
       a.dance=Math.min(99,a.dance+Math.round(Math.random()*3*eff));
       a.acting=Math.min(99,a.acting+Math.round(Math.random()*2*eff));
-      if(a.singing>75&&a.dance>65){a.status='已出道';toast(a.name+' 训练达标，成功出道！🎉','success');}
+      if(a.singing>75&&a.dance>65){a.status='已出道';toast(displayName(a)+' 训练达标，成功出道！🎉','success');}
       cost+=5;
     }
     if(a.status==='工作中'||a.status==='已出道'){
       const mvBonus=lv.mv.lv>0?1.3:1;
-      const g=Math.round(((a.singing+a.dance)/12+Math.random()*8)*mvBonus);
+      let base=(a.singing+a.dance)/12+Math.random()*8;
+      if(a.direction==='歌手'&&a.singing>=70) base*=1.25;
+      else if(a.direction==='演员'&&a.acting>=70) base*=1.25;
+      else if(a.direction==='全能') base*=1.1;
+      const g=Math.round(base*mvBonus);
       income+=g; a.fans=Math.round((a.fans||0)+g/8);
-      addLog(a.name+' 演出收入','plus',g);
+      if(a.direction==='主持人') G.fame+=2;
+      addLog(displayName(a)+' 演出收入','plus',g);
     }
     if(a.status==='休息中') cost+=2;
   });
@@ -852,6 +953,9 @@ function toast(msg,type='success'){
 }
 
 document.getElementById('modal-recruit').addEventListener('click',function(e){if(e.target===this)closeRecruit();});
+document.getElementById('modal-alias').addEventListener('click',function(e){if(e.target===this)closeAliasEdit();});
+document.getElementById('modal-direction').addEventListener('click',function(e){if(e.target===this)closeDirectionSelect();});
+document.getElementById('alias-input').addEventListener('keydown',function(e){if(e.key==='Enter')saveAlias();});
 
 init();
 </script>
