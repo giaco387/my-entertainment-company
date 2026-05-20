@@ -156,7 +156,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   <div class="stats">
     <div class="stat">💰 <strong id="money">1000</strong> 万</div>
     <div class="stat">⭐ 声望 <strong id="fame">12</strong></div>
-    <div class="stat">📅 第 <strong id="month">1</strong> 月</div>
+    <div class="stat">📅 <strong id="game-date">2020年1月1日</strong></div>
     <button class="btn-next" style="background:#fff;color:#1a1a1a;border:1px solid #d0cec7;margin-right:6px" onclick="newGame()">↺ 新游戏</button>
     <button class="btn-next" onclick="nextMonth()">▶ 下一月</button>
   </div>
@@ -257,7 +257,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
         <div class="metric-card"><div class="metric-label">月支出</div><div class="metric-val" id="fin-cost">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月净利润</div><div class="metric-val" id="fin-net">0</div><div class="metric-sub">万元</div></div>
       </div>
-      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin:16px 0 8px">本年累计（第 <span id="fin-year-label">1</span> 年）</div>
+      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin:16px 0 8px">本年累计（<span id="fin-year-label">2020</span> 年）</div>
       <div class="cards-grid" style="grid-template-columns:repeat(3,1fr)">
         <div class="metric-card"><div class="metric-label">年收入</div><div class="metric-val" id="fin-year-income">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">年支出</div><div class="metric-val" id="fin-year-cost">0</div><div class="metric-sub">万元</div></div>
@@ -868,6 +868,7 @@ function init(){
   renderBuildings();renderEvents();updateOverview();updateStats();updateSidebar();
   if(G.artists.length) renderArtistList();
   renderScene('overview');
+  startDayTick();
   if(hasSave){checkAchievements();toast('读取存档成功，继续上次游戏','success');}
   else checkAchievements();
 }
@@ -1260,6 +1261,7 @@ function renderLastEvents(){
 
 function nextMonth(){
   G.month++;
+  gameDay=1;
   G.usedEvents=[];
   G.usedEventArtists=[];
   let income=0,cost=0;
@@ -1311,14 +1313,40 @@ function nextMonth(){
   if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
   G.lastEvents=triggerMonthlyEvents();
   updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();checkAchievements();
+  startDayTick();
+  const{year,month}=gameCalendar();
   const evMsg=G.lastEvents.length?' · '+G.lastEvents.length+'件事件':'';
-  toast('第'+G.month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
+  toast(year+'年'+month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
+}
+
+const GAME_START_YEAR=2020;
+let gameDay=1, _dayTick=null;
+
+function gameCalendar(){
+  const total=G.month-1;
+  return{year:GAME_START_YEAR+Math.floor(total/12),month:(total%12)+1};
+}
+function daysInGameMonth(){
+  const{year,month}=gameCalendar();
+  return new Date(year,month,0).getDate();
+}
+function updateDateDisplay(){
+  const{year,month}=gameCalendar();
+  const el=document.getElementById('game-date');
+  if(el) el.textContent=year+'年'+month+'月'+gameDay+'日';
+}
+function startDayTick(){
+  if(_dayTick) clearInterval(_dayTick);
+  const max=daysInGameMonth();
+  _dayTick=setInterval(()=>{
+    if(gameDay<max){gameDay++;updateDateDisplay();}
+  },1500);
 }
 
 function updateStats(){
   document.getElementById('money').textContent=G.money;
   document.getElementById('fame').textContent=G.fame;
-  document.getElementById('month').textContent=G.month;
+  updateDateDisplay();
 }
 
 function updateSidebar(){
@@ -1367,7 +1395,7 @@ function renderFinance(){
   // 年度统计
   const curYear=Math.ceil(G.month/12)||1;
   const yearStart=(curYear-1)*12+1;
-  document.getElementById('fin-year-label').textContent=curYear;
+  document.getElementById('fin-year-label').textContent=GAME_START_YEAR+(curYear-1);
   const yh=(G.monthlyHistory||[]).filter(h=>h.month>=yearStart);
   const yInc=yh.reduce((s,h)=>s+h.income,0);
   const yCost=yh.reduce((s,h)=>s+h.cost,0);
