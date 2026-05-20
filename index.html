@@ -479,19 +479,19 @@ const G = {
   artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false,
   monthlyIncome: 0, monthlyCost: 0,
   activeTrends: [], agents: [], rivals: [],
-  pendingEvents: [], pendingReleases: [],
+  pendingEvents: [], pendingReleases: [], pendingBuilds: [],
   buildingActions: {},
   buildings: {
-    live:     {name:'直播基地',   lv:0, maxLv:5, icon:'📺', cost:80,  effect:'月收入来源'},
-    practice: {name:'训练室',     lv:1, maxLv:5, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
-    studio:   {name:'录音室',     lv:1, maxLv:5, icon:'🎙️', cost:100, effect:'音乐制作加成'},
-    fanshall: {name:'粉丝见面厅', lv:0, maxLv:3, icon:'💝', cost:150, effect:'人气加成'},
-    mv:       {name:'MV拍摄间',   lv:0, maxLv:3, icon:'🎬', cost:200, effect:'发行收益+30%'},
-    office:   {name:'经纪办公室', lv:1, maxLv:4, icon:'🏢', cost:50,  effect:'可签约+2人/级'},
-    merch:    {name:'周边商品部', lv:0, maxLv:4, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
-    media:    {name:'媒体中心',   lv:0, maxLv:4, icon:'📡', cost:150, effect:'降低负面事件概率'},
-    health:   {name:'健康管理中心',lv:0,maxLv:3, icon:'🏥', cost:100, effect:'防艺人停工'},
-    legal:    {name:'法务部',     lv:0, maxLv:4, icon:'⚖️', cost:130, effect:'降低合同续签费'},
+    live:     {name:'直播基地',    lv:0, maxLv:8, icon:'📺', cost:80,  effect:'月收入来源'},
+    practice: {name:'训练室',      lv:1, maxLv:8, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
+    studio:   {name:'录音室',      lv:1, maxLv:8, icon:'🎙️', cost:100, effect:'音乐制作加成'},
+    fanshall: {name:'粉丝见面厅',  lv:0, maxLv:6, icon:'💝', cost:150, effect:'人气加成'},
+    mv:       {name:'MV拍摄间',    lv:0, maxLv:6, icon:'🎬', cost:200, effect:'发行收益+30%'},
+    office:   {name:'经纪办公室',  lv:1, maxLv:6, icon:'🏢', cost:50,  effect:'可签约+2人/级'},
+    merch:    {name:'周边商品部',  lv:0, maxLv:6, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
+    media:    {name:'媒体中心',    lv:0, maxLv:6, icon:'📡', cost:150, effect:'降低负面事件概率'},
+    health:   {name:'健康管理中心',lv:0, maxLv:6, icon:'🏥', cost:100, effect:'防艺人停工'},
+    legal:    {name:'法务部',      lv:0, maxLv:6, icon:'⚖️', cost:130, effect:'降低合同续签费'},
   }
 };
 
@@ -560,6 +560,10 @@ function loadGame(){
       legal: {name:'法务部',     lv:0, maxLv:4, icon:'⚖️', cost:130, effect:'降低合同续签费'},
     };
     Object.entries(defaultBuildings).forEach(([k,v])=>{if(!G.buildings[k]) G.buildings[k]=v;});
+    if(!G.pendingBuilds) G.pendingBuilds=[];
+    // 更新旧存档的 maxLv 上限
+    const newMaxLv={live:8,practice:8,studio:8,fanshall:6,mv:6,office:6,merch:6,media:6,health:6,legal:6};
+    Object.entries(newMaxLv).forEach(([k,m])=>{if(G.buildings[k]&&G.buildings[k].maxLv<m) G.buildings[k].maxLv=m;});
     return true;
   }catch(e){return false;}
 }
@@ -1573,13 +1577,15 @@ function renderBuildings(){
     const contrib=getBuildingContrib(k,b);
     const cfg=getBuildingActionCfg(k);
     const used=(G.buildingActions||{})[k]>=G.month;
+    const pending=(G.pendingBuilds||[]).find(p=>p.k===k);
+    const monthsLeft=pending?pending.completeAt-G.month:0;
     return `
     <div class="build-card">
       <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:38px;height:38px;border-radius:10px;background:${b.lv>0?'#f0fdf4':'#f5f4f0'};display:flex;align-items:center;justify-content:center;font-size:18px">${b.icon}</div>
+        <div style="width:38px;height:38px;border-radius:10px;background:${b.lv>0?'#f0fdf4':'#f5f4f0'};display:flex;align-items:center;justify-content:center;font-size:18px">${pending?'🔨':b.icon}</div>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:600">${b.name}</div>
-          <div style="font-size:11px;color:#999">${b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv}</div>
+          <div style="font-size:11px;color:${pending?'#d97706':'#999'}">${pending?'施工中 → Lv.'+pending.targetLv+'（还需'+monthsLeft+'月）':(b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv)}</div>
         </div>
       </div>
       ${contrib?`<div style="font-size:11px;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 9px;border-radius:6px;font-weight:500">📊 ${contrib}</div>`
@@ -1587,8 +1593,8 @@ function renderBuildings(){
       <div class="lv-bar"><div class="lv-fill" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
       <div style="display:flex;flex-direction:column;gap:5px">
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm ${b.lv===0?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${b.lv>=b.maxLv?'disabled':''}>
-            ${b.lv===0?'建造':'升级'} (${b.cost}万)
+          <button class="btn btn-sm ${b.lv===0&&!pending?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${(b.lv>=b.maxLv||pending)?'disabled':''}>
+            ${pending?'🔨 建设中':(b.lv===0?'建造':'升级')+' ('+b.cost+'万)'}
           </button>
           ${b.lv>0?`<button class="btn btn-sm" onclick="enterRoom('${k}')">进入 →</button>`:''}
         </div>
@@ -1600,15 +1606,27 @@ function renderBuildings(){
   }).join('');
 }
 
+function buildDuration(targetLv){
+  if(targetLv<=1) return 1;
+  if(targetLv<=3) return 2;
+  if(targetLv<=5) return 3;
+  return 4;
+}
 function upgradeBuilding(k){
   const b=G.buildings[k];
   if(b.lv>=b.maxLv){toast('已达最高等级','error');return;}
+  if((G.pendingBuilds||[]).some(p=>p.k===k)){toast('该设施正在建设中','error');return;}
   if(G.money<b.cost){toast('资金不足 '+b.cost+' 万！','error');return;}
   const paid=b.cost;
-  G.money-=paid; b.lv++; b.cost=Math.round(b.cost*1.5);
-  addLog((b.lv===1?'建造':'升级')+b.name,'minus',paid);
-  renderBuildings();updateStats();updateOverview();saveGame();checkAchievements();
-  toast(b.name+(b.lv===1?' 建造完成！':' 升级至 Lv.'+b.lv+'！'),'success');
+  const targetLv=b.lv+1;
+  const dur=buildDuration(targetLv);
+  G.money-=paid;
+  b.cost=Math.round(b.cost*1.5);
+  if(!G.pendingBuilds) G.pendingBuilds=[];
+  G.pendingBuilds.push({k, targetLv, completeAt:G.month+dur});
+  addLog((targetLv===1?'开工建造':'开始升级')+b.name+'→Lv.'+targetLv,'minus',paid);
+  renderBuildings();updateStats();updateOverview();saveGame();
+  toast(b.name+(targetLv===1?' 开始建造，':'  Lv.'+targetLv+' 施工中，')+dur+'个月后完工','success');
 }
 
 function renderEvents(){
@@ -1891,6 +1909,14 @@ function nextMonth(){
     const msg=sel.length?ev.apply(sel,pe.r):'';
     if(!(G.completedEventNames||[]).includes(pe.name))(G.completedEventNames=G.completedEventNames||[]).push(pe.name);
     G.lastEvents.push({name:pe.name+' 结果出炉',desc:(msg||'活动圆满结束')+' · 声望+'+pe.r.fame+' 收益+'+pe.r.money+'万',icon:pe.icon,type:'good'});
+  });
+  // 完成待处理建设
+  const doneBuilds=(G.pendingBuilds||[]).filter(p=>p.completeAt<=G.month);
+  G.pendingBuilds=(G.pendingBuilds||[]).filter(p=>p.completeAt>G.month);
+  doneBuilds.forEach(p=>{
+    const b=G.buildings[p.k];
+    if(b) b.lv=p.targetLv;
+    G.lastEvents.push({name:b.name+(p.targetLv===1?' 建造完成':' 升级至 Lv.'+p.targetLv),desc:'设施正式投入使用，效果已生效！',icon:b.icon,type:'good'});
   });
   // 完成待处理内容发行
   const doneReleases=(G.pendingReleases||[]).filter(r=>r.goLiveAt<=G.month);
