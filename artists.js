@@ -19,6 +19,16 @@ const POOL = [
   {name:'曹梦瑶', abbr:'瑶', color:'#f0f9ff', tc:'#0c4a6e', singing:72, dance:84, acting:66, rap:24, cost:75,  rarity:'良好'},
   {name:'白子轩', abbr:'轩', color:'#f8fafc', tc:'#334155', singing:44, dance:66, acting:28, rap:94, cost:55,  rarity:'普通'},
   {name:'夏晨阳', abbr:'晨', color:'#f0fdfa', tc:'#134e4a', singing:82, dance:79, acting:74, rap:58, cost:130, rarity:'稀有'},
+
+  // ── 更多艺人 ──────────────────────────────────────────
+  {name:'宋雪儿', abbr:'雪', color:'#fef6ee', tc:'#c2410c', singing:83, dance:63, acting:52, rap:20, cost:65,  rarity:'良好'},
+  {name:'丁俊豪', abbr:'丁', color:'#eef2ff', tc:'#3730a3', singing:36, dance:74, acting:44, rap:90, cost:50,  rarity:'良好'},
+  {name:'许心雨', abbr:'心', color:'#fff0f3', tc:'#9d174d', singing:76, dance:80, acting:84, rap:32, cost:110, rarity:'稀有'},
+  {name:'冯子越', abbr:'越', color:'#e7f5ff', tc:'#1864ab', singing:52, dance:94, acting:36, rap:58, cost:70,  rarity:'良好'},
+  {name:'江小鱼', abbr:'鱼', color:'#fffde7', tc:'#6d4c41', singing:64, dance:54, acting:72, rap:44, cost:40,  rarity:'普通'},
+  {name:'唐千羽', abbr:'羽', color:'#fef0ff', tc:'#7e22ce', singing:79, dance:67, acting:70, rap:32, cost:78,  rarity:'良好'},
+  {name:'贺文轩', abbr:'贺', color:'#f0f4ff', tc:'#1e3a8a', singing:46, dance:56, acting:96, rap:20, cost:120, rarity:'稀有'},
+  {name:'林梓萱', abbr:'萱', color:'#fff5f5', tc:'#7f1d1d', singing:93, dance:87, acting:85, rap:68, cost:200, rarity:'✨传奇'},
 ];
 
 // 艺人发展方向
