@@ -20,6 +20,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .nav-btn{display:flex;align-items:center;gap:9px;padding:9px 12px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;color:#666;width:100%;text-align:left;transition:all 0.15s}
 .nav-btn:hover{background:#f5f4f0;color:#1a1a1a}
 .nav-btn.active{background:#f0ede6;color:#1a1a1a;font-weight:600}
+.nav-btn.locked{opacity:.3;cursor:not-allowed}
+.nav-btn.locked:hover{background:transparent;color:#666}
 .content{padding:20px;overflow-y:auto}
 .section{display:none}
 .section.active{display:block}
@@ -1212,6 +1214,7 @@ function init(){
   if(!G.pendingEvents) G.pendingEvents=[];
   if(!G.pendingReleases) G.pendingReleases=[];
   if(!G.buildingActions) G.buildingActions={};
+  if(!G.unlockedTabs) G.unlockedTabs=[];
   G.artists.forEach(a=>{
     if(a.pr===undefined) a.pr=60;
     if(!a.contractEnd) a.contractEnd=G.month+24;
@@ -1224,9 +1227,12 @@ function init(){
   startDayTick();
   if(hasSave){checkAchievements();toast('读取存档成功，继续上次游戏','success');}
   else checkAchievements();
+  _initDone=true;
 }
 
 function showSection(id){
+  const lockEntry=TAB_UNLOCK.find(t=>t.id===id);
+  if(lockEntry&&!lockEntry.check()){toast('🔒 尚未解锁 · '+lockEntry.hint,'error');return;}
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('section-'+id).classList.add('active');
@@ -2000,10 +2006,44 @@ function updateStats(){
   updateDateDisplay();
 }
 
+const TAB_UNLOCK=[
+  {id:'content',      label:'内容发行',   hint:'签约第一位练习生后解锁',
+   check(){return G.artists.length>=1||G.month>=3;}},
+  {id:'finance',      label:'财务报表',   hint:'签约第一位练习生后解锁',
+   check(){return G.artists.length>=1||G.month>=3;}},
+  {id:'events',       label:'活动赛事',   hint:'第一位艺人出道后解锁',
+   check(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中')||G.month>=6;}},
+  {id:'market',       label:'市场动态',   hint:'第一位艺人出道后解锁',
+   check(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中')||G.month>=6;}},
+  {id:'achievements', label:'成就中心',   hint:'解锁第一个成就后开放',
+   check(){return (G.achievements||[]).length>=1||G.month>=3;}},
+  {id:'agents',       label:'经纪人团队', hint:'声望达到80后解锁',
+   check(){return G.fame>=80||G.month>=9;}},
+  {id:'rivals',       label:'竞争对手',   hint:'声望达到150后解锁',
+   check(){return G.fame>=150||G.month>=12;}},
+];
+let _initDone=false;
+
+function updateNavUnlocks(){
+  if(!G.unlockedTabs) G.unlockedTabs=[];
+  TAB_UNLOCK.forEach(t=>{
+    const btn=document.getElementById('nav-'+t.id);
+    if(!btn) return;
+    const ok=t.check();
+    const tracked=G.unlockedTabs.includes(t.id);
+    if(ok&&!tracked){
+      G.unlockedTabs.push(t.id);
+      if(_initDone) toast('🔓 '+t.label+' 已解锁！','success');
+    }
+    btn.classList.toggle('locked',!ok);
+  });
+}
+
 function updateSidebar(){
   document.getElementById('artist-count').textContent=G.artists.length;
   const lv=G.fame<200?'⭐ 初创公司':G.fame<800?'⭐⭐ 新兴公司':G.fame<2500?'⭐⭐⭐ 知名公司':G.fame<8000?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
   document.getElementById('company-level').textContent=lv;
+  updateNavUnlocks();
 }
 
 function updateOverview(){
