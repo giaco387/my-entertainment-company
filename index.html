@@ -37,7 +37,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .btn:active{transform:scale(0.98)}
 .btn:disabled{opacity:0.4;cursor:not-allowed}
 .btn-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
-.btn-primary:hover{background:#333;background:#333}
+.btn-primary:hover{background:#333}
 .btn-success{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7}
 .btn-sm{padding:5px 10px;font-size:12px}
 .artist-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0ede6}
@@ -907,7 +907,7 @@ function renderStreamingInfo(){
 }
 
 function signStreaming(){
-  if(!G.buildings.studio.lv>=2){toast('需要录音室 Lv.2+','error');return;}
+  if(G.buildings.studio.lv<2){toast('需要录音室 Lv.2+','error');return;}
   if(G.fame<40){toast('需要声望 ≥ 40','error');return;}
   if(G.money<50){toast('资金不足 50万','error');return;}
   G.money-=50;
@@ -1795,7 +1795,6 @@ function confirmEventWithArtists(){
   if(hasTrend('idol_boom')&&ev.name==='新人选秀综艺'){r.fame=Math.round(r.fame*1.5);r.money=Math.round(r.money*1.5);}
   if(hasTrend('concert_craze')&&ev.name==='演唱会巡演'){r.fame=Math.round(r.fame*1.5);r.money=Math.round(r.money*1.5);}
   if(ev.name==='品牌代言活动'){const m=(hasTrend('ad_market_up')?1.6:1)*(hasAgent('biz')?1.4:1);r.money=Math.round(r.money*m);r.fame=Math.round(r.fame*m);}
-  if(hasTrend('music_award')&&ev.name==='颁奖典礼'){r.fame=Math.round(r.fame*1.8);r.money=Math.round(r.money*1.8);}
   if(hasTrend('economy_down')){r.money=Math.round(r.money*0.75);}
   G.usedEvents.push(currentEventIdx);
   selectedEventArtists.forEach(ai=>{if(!(G.usedEventArtists||[]).includes(ai)){(G.usedEventArtists=G.usedEventArtists||[]).push(ai);}});
@@ -1942,6 +1941,7 @@ function nextMonth(){
   gameDay=1;
   G.usedEvents=[];
   G.usedEventArtists=[];
+  G.lastEvents=[];
   let income=0,cost=0;
   updateTrends();
   const agentSalary=(G.agents||[]).reduce((s,id)=>{const ag=agentData(id);return s+(ag?ag.salary:0);},0);
@@ -2037,7 +2037,7 @@ function nextMonth(){
   G.fame+=Math.floor(income/25+1);
   (G.monthlyHistory=G.monthlyHistory||[]).push({month:G.month,income,cost});
   if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
-  G.lastEvents=triggerMonthlyEvents();
+  G.lastEvents.push(...triggerMonthlyEvents());
   exhausted.forEach(a=>G.lastEvents.push({name:displayName(a)+' · 精力耗尽',desc:'长期高强度工作导致精力耗尽，已被迫休息！记得让艺人定期休整。',icon:'😮‍💨',type:'bad'}));
   if(G.month%3===0) doRivalAction();
   if(hasAgent('pr')&&G.artists.length){
@@ -2046,7 +2046,7 @@ function nextMonth(){
   }
   G.artists.forEach(a=>{
     if(!a.contractEnd) a.contractEnd=G.month+24;
-    if(a.contractEnd<=G.month){
+    if(a.contractEnd===G.month){
       G.lastEvents.push({name:displayName(a)+' 合同到期',desc:'合同已到期！请前往「艺人管理→合同」及时续签，否则艺人将流失',icon:'📋',type:'bad'});
     }
   });
@@ -2057,7 +2057,6 @@ function nextMonth(){
   toast('第'+year+'年'+month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
 }
 
-const GAME_START_YEAR=2020;
 let gameDay=1, _dayTick=null;
 
 function gameCalendar(){
