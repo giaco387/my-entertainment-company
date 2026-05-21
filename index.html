@@ -562,6 +562,7 @@ function loadGame(){
     Object.entries(defaultBuildings).forEach(([k,v])=>{if(!G.buildings[k]) G.buildings[k]=v;});
     if(!G.pendingBuilds) G.pendingBuilds=[];
     if(!G.lastAwardMonth) G.lastAwardMonth=0;
+    G.artists.forEach(a=>{if(a.energy===undefined) a.energy=80;});
     // 更新旧存档的 maxLv 上限
     const newMaxLv={live:8,practice:8,studio:8,fanshall:6,mv:6,office:6,merch:6,media:6,health:6,legal:6};
     Object.entries(newMaxLv).forEach(([k,m])=>{if(G.buildings[k]&&G.buildings[k].maxLv<m) G.buildings[k].maxLv=m;});
@@ -1376,17 +1377,43 @@ function renderArtistList(){
 function renderTrainList(){
   const el=document.getElementById('train-list');
   if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
-  el.innerHTML=G.artists.map((a,i)=>`
-    <div class="artist-row">
-      <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${displayName(a)}</div><div style="font-size:11px;color:#999;margin-top:2px">当前: ${a.status}</div></div>
-      <div style="display:flex;gap:5px">
+  const eff=(1+(G.buildings.practice.lv*0.2))*(hasTrend('training_boost')?1.4:1)*(hasAgent('trainer')?1.4:1);
+  el.innerHTML=G.artists.map((a,i)=>{
+    const energy=a.energy===undefined?80:a.energy;
+    const eColor=energy>60?'#16a34a':energy>20?'#d97706':'#dc2626';
+    const eLabel=energy>60?'充沛':energy>20?'疲惫':'耗尽';
+    const pr=a.pr||60;
+    const prMult=pr>=80?1.3:pr>=60?1.0:pr>=40?0.7:0.3;
+    const mvBonus=G.buildings.mv.lv>0?1.3:1;
+    const workEst=Math.round(((a.singing+a.dance)/12+4)*mvBonus*prMult);
+    const trainMax=Math.round(3*eff);
+    const healthBonus=(G.buildings.health?.lv||0)*3;
+    const preview={
+      '训练中':`唱/舞 +0~${trainMax} · 演 +0~${Math.round(trainMax*0.7)} · 精力 -10${energy<=20?' ⚠️效率-40%':''}`,
+      '工作中':`预计收入 +${workEst}~${workEst+8}万 · 精力 -15${energy<=20?' ⚠️效率-40%':''}`,
+      '休息中':`精力 +${30+healthBonus} · PR自然恢复`,
+      '已出道':`预计收入 +${workEst}~${workEst+8}万 · 精力 -15${energy<=20?' ⚠️效率-40%':''}`,
+    }[a.status]||'';
+    return `<div class="artist-row" style="flex-wrap:wrap;gap:8px;align-items:flex-start">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <span style="font-size:10px;color:#999;flex-shrink:0">⚡ 精力</span>
+          <div style="flex:1;height:6px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:90px">
+            <div style="height:100%;border-radius:99px;background:${eColor};width:${energy}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:10px;font-weight:700;color:${eColor}">${energy} · ${eLabel}</span>
+        </div>
+        ${preview?`<div style="font-size:10px;color:#555;margin-top:4px;background:#f5f4f0;padding:3px 7px;border-radius:5px">📊 ${preview}</div>`:''}
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
         <button class="btn btn-sm" onclick="setStatus(${i},'训练中')" ${a.status==='训练中'?'disabled':''}>训练</button>
-        <button class="btn btn-sm btn-success" onclick="setStatus(${i},'工作中')" ${a.status==='工作中'?'disabled':''}>接工作</button>
+        <button class="btn btn-sm btn-success" onclick="setStatus(${i},'工作中')" ${a.status==='工作中'||a.status==='已出道'?'disabled':''}>接工作</button>
         <button class="btn btn-sm" onclick="setStatus(${i},'休息中')" ${a.status==='休息中'?'disabled':''}>休息</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderPrTab(){
@@ -1836,7 +1863,7 @@ function recruit(i){
   const cost=calcRecruitCost(p.cost);
   if(G.money<cost){toast('资金不足 '+cost+' 万！','error');return;}
   G.money-=cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:cost,pr:60,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
+  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:cost,pr:60,energy:100,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
   addLog('签约'+p.name+'（'+recruitContractMonths+'个月）','minus',cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();checkAchievements();maybeRefreshArtistScene();closeRecruit();
   toast('成功签约 '+p.name+'！','success');
@@ -1961,14 +1988,18 @@ function nextMonth(){
     if(r.type==='doc'){G.fame+=Math.max(1,Math.round(mult*4));}
     if(g>0){income+=g;addLog(r.title+' 发行收益','plus',g);}
   });
+  const exhausted=[];
   G.artists.forEach(a=>{
+    if(a.energy===undefined) a.energy=80;
+    const energyMult=a.energy<=20?0.6:1.0;
     const eff=(1+(lv.practice.lv*0.2))*(hasTrend('training_boost')?1.4:1)*(hasAgent('trainer')?1.4:1);
     if(a.status==='训练中'){
-      a.singing=Math.min(99,a.singing+Math.round(Math.random()*3*eff));
-      a.dance=Math.min(99,a.dance+Math.round(Math.random()*3*eff));
-      a.acting=Math.min(99,a.acting+Math.round(Math.random()*2*eff));
+      a.singing=Math.min(99,a.singing+Math.round(Math.random()*3*eff*energyMult));
+      a.dance=Math.min(99,a.dance+Math.round(Math.random()*3*eff*energyMult));
+      a.acting=Math.min(99,a.acting+Math.round(Math.random()*2*eff*energyMult));
       if(a.singing>75&&a.dance>65){a.status='已出道';toast(displayName(a)+' 训练达标，成功出道！🎉','success');}
-      cost+=5;
+      cost+=5; a.totalCost=(a.totalCost||0)+5;
+      a.energy=Math.max(0,a.energy-10);
     }
     if(a.status==='工作中'||a.status==='已出道'){
       const mvBonus=lv.mv.lv>0?1.3:1;
@@ -1980,14 +2011,22 @@ function nextMonth(){
       else if(a.direction==='全能') base*=1.1;
       const economyMult=hasTrend('economy_down')?0.75:1;
       const actingMult=(hasTrend('acting_trend')&&a.acting>=70)?1.4:1;
-      const g=Math.round(base*mvBonus*prMult*economyMult*actingMult);
+      const g=Math.round(base*mvBonus*prMult*economyMult*actingMult*energyMult);
       income+=g; a.fans=Math.round((a.fans||0)+g/8);
       a.totalIncome=(a.totalIncome||0)+g;
       if(a.direction==='主持人') G.fame+=2;
       addLog(displayName(a)+' 演出收入','plus',g);
+      a.energy=Math.max(0,a.energy-15);
     }
-    if(a.status==='训练中') a.totalCost=(a.totalCost||0)+5;
-    if(a.status==='休息中'){cost+=2;a.totalCost=(a.totalCost||0)+2;}
+    if(a.status==='休息中'){
+      cost+=2; a.totalCost=(a.totalCost||0)+2;
+      const healthBonus=(lv.health?.lv||0)*3;
+      a.energy=Math.min(100,a.energy+30+healthBonus);
+    }
+    if(a.energy<=0&&a.status!=='休息中'){
+      a.energy=0; a.status='休息中';
+      exhausted.push(a);
+    }
     const _pr=a.pr||60;
     if(_pr<40) a._hadCrisis=true;
     if(_pr<60) a.pr=Math.min(60,_pr+2);
@@ -1999,6 +2038,7 @@ function nextMonth(){
   (G.monthlyHistory=G.monthlyHistory||[]).push({month:G.month,income,cost});
   if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
   G.lastEvents=triggerMonthlyEvents();
+  exhausted.forEach(a=>G.lastEvents.push({name:displayName(a)+' · 精力耗尽',desc:'长期高强度工作导致精力耗尽，已被迫休息！记得让艺人定期休整。',icon:'😮‍💨',type:'bad'}));
   if(G.month%3===0) doRivalAction();
   if(hasAgent('pr')&&G.artists.length){
     const worst=G.artists.reduce((b,a)=>((a.pr||60)<(b.pr||60)?a:b));
