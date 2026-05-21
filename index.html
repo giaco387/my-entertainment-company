@@ -2050,7 +2050,7 @@ function updateStats(){
 
 function updateSidebar(){
   document.getElementById('artist-count').textContent=G.artists.length;
-  const lv=G.fame<30?'⭐ 初创公司':G.fame<80?'⭐⭐ 新兴公司':G.fame<200?'⭐⭐⭐ 知名公司':G.fame<500?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
+  const lv=G.fame<200?'⭐ 初创公司':G.fame<800?'⭐⭐ 新兴公司':G.fame<2500?'⭐⭐⭐ 知名公司':G.fame<8000?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
   document.getElementById('company-level').textContent=lv;
 }
 
