@@ -127,10 +127,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .direction-card.selected{border-color:#1a1a1a;background:#f0ede6}
 #alias-input{width:100%;padding:8px 12px;border:1px solid #d0cec7;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit}
 #alias-input:focus{border-color:#1a1a1a;box-shadow:0 0 0 2px rgba(26,26,26,.1)}
-.section.dark-scene .section-title{color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
-.section.dark-scene .tab{color:rgba(255,255,255,.45)}
-.section.dark-scene .tab.active{color:#fff;border-bottom-color:rgba(255,255,255,.8)}
-.section.dark-scene .tab-bar{border-bottom-color:rgba(255,255,255,.12)}
 .card,.metric-card,.build-card,.event-item,.tip-box{box-shadow:0 2px 16px rgba(0,0,0,.1)}
 .ach-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
 .ach-card{background:#fff;border:1px solid #e8e5de;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;transition:all .2s}
@@ -642,7 +638,6 @@ function renderScene(id){
   section.classList.remove('dark-scene');
   const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,events:sceneEvents,finance:sceneFinance,content:sceneContent,achievements:sceneAchievements,market:sceneMarket,agents:sceneAgents,rivals:sceneRivals};
   if(fns[id]) bg.innerHTML=fns[id]();
-  if(id==='artists') section.classList.add('dark-scene');
 }
 
 function maybeRefreshArtistScene(){
@@ -654,30 +649,7 @@ function sceneOverview(){
 }
 
 function sceneArtists(){
-  const stars=Array(25).fill(0).map((_,i)=>`<div style="position:absolute;left:${(i*37+11)%97}%;top:${(i*23+7)%57}%;width:${2+(i%3)}px;height:${2+(i%3)}px;border-radius:50%;background:#fff;opacity:${.3+.07*(i%10)}"></div>`).join('');
-  const spots=[15,50,85].map(l=>`<div style="position:absolute;top:0;left:${l}%;transform:translateX(-50%);width:200px;height:75%;background:linear-gradient(180deg,rgba(255,230,80,.18),transparent);clip-path:polygon(35% 0,65% 0,100% 100%,0% 100%)"></div>`).join('');
-  const noteChars=['♪','♫','♩','♬'];
-  const notes=Array(8).fill(0).map((_,i)=>`<div style="position:absolute;left:${6+i*12}%;top:${15+(i*17)%38}%;font-size:${14+(i%3)*6}px;color:rgba(255,220,80,${.13+.05*(i%4)});transform:rotate(${-20+i*9}deg)">${noteChars[i%4]}</div>`).join('');
-  const cnt=G.artists.length;
-  let avatars='';
-  if(cnt>0){
-    const sp=Math.min(88/(cnt+1),15);
-    G.artists.forEach((a,i)=>{
-      const left=6+(i+1)*sp;
-      avatars+=`<div style="position:absolute;bottom:8px;left:${left}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px">
-        <div style="width:38px;height:38px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid rgba(255,255,255,.5);box-shadow:0 0 14px rgba(255,210,60,.6)">${a.abbr}</div>
-        <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
-      </div>`;
-    });
-  }
-  return `
-  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#080320 0%,#1a0533 35%,#2d0845 65%,#1a0533 100%)"></div>
-  ${stars}${spots}${notes}
-  <div style="position:absolute;bottom:0;left:0;right:0;height:68px;background:linear-gradient(180deg,#3b2460,#231446);border-top:2px solid rgba(255,200,50,.4)">
-    ${avatars}
-    ${cnt===0?'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,.25)">还没有艺人上台 ...</div>':''}
-  </div>
-  <div style="position:absolute;top:0;left:0;right:0;height:7px;background:linear-gradient(90deg,#8b5cf6,#ec4899,#f59e0b,#ec4899,#8b5cf6)"></div>`;
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
 }
 
 function sceneBuildings(){
