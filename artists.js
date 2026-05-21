@@ -1,5 +1,6 @@
 // 练习生候选池
 const POOL = [
+  // ── 原有艺人 ──────────────────────────────────────────
   {name:'林晓晴', abbr:'晓', color:'#dbeafe', tc:'#1e40af', singing:72, dance:58, acting:45, rap:20, cost:30,  rarity:'普通'},
   {name:'张宇航', abbr:'宇', color:'#fef3c7', tc:'#92400e', singing:45, dance:80, acting:30, rap:65, cost:40,  rarity:'良好'},
   {name:'苏梦琪', abbr:'梦', color:'#fce7f3', tc:'#831843', singing:88, dance:62, acting:70, rap:15, cost:80,  rarity:'优秀'},
@@ -8,6 +9,16 @@ const POOL = [
   {name:'李铭宇', abbr:'铭', color:'#ffedd5', tc:'#7c2d12', singing:50, dance:55, acting:40, rap:90, cost:50,  rarity:'普通'},
   {name:'赵紫妍', abbr:'紫', color:'#d1fae5', tc:'#064e3b', singing:95, dance:70, acting:80, rap:25, cost:150, rarity:'✨传奇'},
   {name:'陆峰',   abbr:'峰', color:'#fef9c3', tc:'#713f12', singing:60, dance:88, acting:50, rap:72, cost:70,  rarity:'良好'},
+
+  // ── 新增艺人 ──────────────────────────────────────────
+  {name:'方晴朗', abbr:'晴', color:'#e0f2fe', tc:'#0369a1', singing:62, dance:70, acting:55, rap:38, cost:45,  rarity:'普通'},
+  {name:'郑思远', abbr:'思', color:'#fdf2f8', tc:'#86198f', singing:42, dance:86, acting:32, rap:80, cost:55,  rarity:'良好'},
+  {name:'周小希', abbr:'希', color:'#ecfdf5', tc:'#065f46', singing:68, dance:48, acting:88, rap:22, cost:65,  rarity:'良好'},
+  {name:'吴天泽', abbr:'天', color:'#fff1f2', tc:'#9f1239', singing:91, dance:52, acting:40, rap:28, cost:85,  rarity:'优秀'},
+  {name:'沈雨桐', abbr:'桐', color:'#f5f0ff', tc:'#5b21b6', singing:58, dance:62, acting:52, rap:56, cost:35,  rarity:'普通'},
+  {name:'曹梦瑶', abbr:'瑶', color:'#f0f9ff', tc:'#0c4a6e', singing:72, dance:84, acting:66, rap:24, cost:75,  rarity:'良好'},
+  {name:'白子轩', abbr:'轩', color:'#f8fafc', tc:'#334155', singing:44, dance:66, acting:28, rap:94, cost:55,  rarity:'普通'},
+  {name:'夏晨阳', abbr:'晨', color:'#f0fdfa', tc:'#134e4a', singing:82, dance:79, acting:74, rap:58, cost:130, rarity:'稀有'},
 ];
 
 // 艺人发展方向
