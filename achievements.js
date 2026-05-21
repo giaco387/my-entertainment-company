@@ -5,12 +5,12 @@ const ACHIEVEMENTS = [
   // ── 里程碑 ──────────────────────────────────────────────
   { id:'first_debut',    name:'初露锋芒', icon:'🌟', cat:'里程碑', desc:'第一位练习生成功出道',
     check() { return G.artists.some(a => a.status === '已出道' || a.status === '工作中'); } },
-  { id:'fame_80',        name:'新兴势力', icon:'📈', cat:'里程碑', desc:'公司声望达到80',
-    check() { return G.fame >= 80; } },
-  { id:'fame_200',       name:'业界翘楚', icon:'🏅', cat:'里程碑', desc:'公司声望达到200',
-    check() { return G.fame >= 200; } },
-  { id:'fame_500',       name:'娱乐帝国', icon:'👑', cat:'里程碑', desc:'声望达到500，成为顶级娱乐帝国',
-    check() { return G.fame >= 500; } },
+  { id:'fame_800',       name:'新兴势力', icon:'📈', cat:'里程碑', desc:'公司声望达到800',
+    check() { return G.fame >= 800; } },
+  { id:'fame_2500',      name:'业界翘楚', icon:'🏅', cat:'里程碑', desc:'公司声望达到2500',
+    check() { return G.fame >= 2500; } },
+  { id:'fame_8000',      name:'娱乐帝国', icon:'👑', cat:'里程碑', desc:'声望达到8000，成为顶级娱乐帝国',
+    check() { return G.fame >= 8000; } },
   { id:'money_3000',     name:'财富自由', icon:'💰', cat:'里程碑', desc:'资金突破3000万',
     check() { return G.money >= 3000; } },
   { id:'month_24',       name:'两年老板', icon:'📅', cat:'里程碑', desc:'经营公司满24个月',
@@ -50,6 +50,6 @@ const ACHIEVEMENTS = [
   // ── 活动 ────────────────────────────────────────────────
   { id:'concert_done',   name:'演唱会初体验',icon:'🎪',cat:'活动', desc:'首次成功举办演唱会巡演',
     check() { return (G.completedEventNames || []).includes('演唱会巡演'); } },
-  { id:'award_done',     name:'站上颁奖台', icon:'🏆',cat:'活动', desc:'首次参加颁奖典礼',
-    check() { return (G.completedEventNames || []).includes('颁奖典礼'); } },
+  { id:'award_done',     name:'站上颁奖台', icon:'🏆',cat:'活动', desc:'首次受邀参加颁奖典礼',
+    check() { return (G.lastAwardMonth || 0) > 0; } },
 ];
