@@ -1495,11 +1495,26 @@ function doFacilityAction(k){
 function renderBuildings(){
   const el=document.getElementById('build-grid');
   el.innerHTML=Object.entries(G.buildings).map(([k,b])=>{
+    const lockEntry=BUILDING_UNLOCK[k];
+    const locked=lockEntry&&!lockEntry.check();
     const contrib=getBuildingContrib(k,b);
     const cfg=getBuildingActionCfg(k);
     const used=(G.buildingActions||{})[k]>=G.month;
     const pending=(G.pendingBuilds||[]).find(p=>p.k===k);
     const monthsLeft=pending?pending.completeAt-G.month:0;
+    if(locked) return `
+    <div class="build-card" style="opacity:.35;pointer-events:none">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:38px;height:38px;border-radius:10px;background:#f5f4f0;display:flex;align-items:center;justify-content:center;font-size:18px">🔒</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${b.name}</div>
+          <div style="font-size:11px;color:#999">${lockEntry.hint}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#999;background:#f5f4f0;padding:5px 9px;border-radius:6px">${b.effect}</div>
+      <div class="lv-bar"><div class="lv-fill" style="width:0%"></div></div>
+      <button class="btn btn-sm" disabled>🔒 尚未解锁</button>
+    </div>`;
     return `
     <div class="build-card">
       <div style="display:flex;align-items:center;gap:8px">
@@ -1535,6 +1550,8 @@ function buildDuration(targetLv){
 }
 function upgradeBuilding(k){
   const b=G.buildings[k];
+  const lockEntry=BUILDING_UNLOCK[k];
+  if(lockEntry&&!lockEntry.check()){toast('🔒 '+b.name+' 尚未解锁 · '+lockEntry.hint,'error');return;}
   if(b.lv>=b.maxLv){toast('已达最高等级','error');return;}
   if((G.pendingBuilds||[]).some(p=>p.k===k)){toast('该设施正在建设中','error');return;}
   if(G.money<b.cost){toast('资金不足 '+b.cost+' 万！','error');return;}
@@ -1979,6 +1996,15 @@ function updateStats(){
   document.getElementById('fame').textContent=G.fame;
   updateDateDisplay();
 }
+
+const BUILDING_UNLOCK={
+  fanshall:{ hint:'旗下总粉丝达到5万后解锁',  check(){ return G.artists.reduce((s,a)=>s+(a.fans||0),0)>=5; } },
+  merch:   { hint:'旗下总粉丝达到10万后解锁', check(){ return G.artists.reduce((s,a)=>s+(a.fans||0),0)>=10; } },
+  mv:      { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  media:   { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  health:  { hint:'公司声望达到50后解锁',      check(){ return G.fame>=50; } },
+  legal:   { hint:'公司声望达到50后解锁',      check(){ return G.fame>=50; } },
+};
 
 const TAB_UNLOCK=[
   {id:'content',      label:'内容发行',   hint:'签约第一位练习生后解锁',
