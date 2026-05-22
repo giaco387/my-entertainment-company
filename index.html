@@ -1667,7 +1667,7 @@ function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'
 
 function setStatus(i,s){
   G.artists[i].status=s;
-  renderArtistList();renderTrainList();saveGame();
+  renderArtistList();renderTrainList();updateSidebar();saveGame();
   toast(displayName(G.artists[i])+' 状态已更新为「'+s+'」','success');
 }
 
