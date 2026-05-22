@@ -1234,12 +1234,18 @@ function contractAttitude(a){
   return{label:'接受标准',icon:'😊',desc:'状态稳定，接受公司标准续签条款',costMult:1.0,maxYears:5,bg:'#f5f4f0',tc:'#555'};
 }
 
-function calcRenewCost(a,months){
+function calcRenewCost(a,months,offerPct=100){
   const legalDisc=(G.buildings.legal?.lv||0)*0.1;
   const base=Math.round((30+(a.fans||0)*0.5)*(1-legalDisc));
   const durMult={12:0.7,24:1.0,36:1.25,48:1.5,60:1.75}[months]||1.0;
   const att=contractAttitude(a);
-  return{cost:Math.round(base*durMult*att.costMult),base,durMult,attMult:att.costMult};
+  const suggested=Math.round(base*durMult*att.costMult);
+  const offerMult=Math.max(0.8,Math.min(2,offerPct/100));
+  const cost=Math.max(1,Math.round(suggested*offerMult));
+  const baseRisk=renewRejectRate(a);
+  const offerBonus=Math.round((offerMult-1)*60);
+  const risk=Math.max(0,Math.min(95,baseRisk-offerBonus));
+  return{cost,suggested,base,durMult,attMult:att.costMult,offerPct:Math.round(offerMult*100),offerMult,baseRisk,risk,success:100-risk};
 }
 
 function renderContracts(){
@@ -1273,16 +1279,16 @@ function renderContracts(){
         ${canRenew?`<div style="font-size:10px;margin-top:3px;display:inline-block;background:${att.bg};color:${att.tc};padding:1px 7px;border-radius:99px;font-weight:600">${att.icon} ${att.label}</div>`:''}
       </div>
       <button class="btn btn-sm ${canRenew?'btn-primary':''}" onclick="${canRenew?'openRenewModal('+i+')':''}" ${canRenew?'':'disabled'}>
-        ${canRenew?'谈判续签':'未到期'}
+        ${canRenew?'进入谈判':'未到期'}
       </button>
     </div>`;
   }).join('');
 }
 
-let renewIdx=-1,renewMonths=24;
+let renewIdx=-1,renewMonths=24,renewOfferPct=100;
 
 function openRenewModal(i){
-  renewIdx=i;renewMonths=24;
+  renewIdx=i;renewMonths=24;renewOfferPct=100;
   renderRenewModal();
   document.getElementById('modal-renew-contract').classList.add('open');
 }
@@ -1291,10 +1297,9 @@ function renderRenewModal(){
   const a=G.artists[renewIdx];
   const remaining=(a.contractEnd||G.month+24)-G.month;
   const att=contractAttitude(a);
-  const {cost,base,durMult,attMult}=calcRenewCost(a,renewMonths);
+  const {cost,suggested,base,durMult,attMult,offerPct,success,risk}=calcRenewCost(a,renewMonths,renewOfferPct);
   const affordable=G.money>=cost;
   const durations=[{m:12,label:'1年',suffix:'-30%'},{m:24,label:'2年',suffix:'标准'},{m:36,label:'3年',suffix:'+25%'},{m:48,label:'4年',suffix:'+50%'},{m:60,label:'5年',suffix:'+75%'}];
-  const risk=renewRejectRate(a);
   const riskDesc=risk>=50?'高风险：艺人很可能拒绝续签并提出解约':risk>=30?'中等风险：艺人有顾虑，建议改善条件再谈':risk>0?'低风险：轻微顾虑，谈判有望成功':'';
   const riskHtml=risk>0?'<div style="background:#fff0f0;border-radius:10px;padding:10px 14px;margin-bottom:16px;border-left:3px solid #f87171"><div style="font-size:12px;font-weight:700;color:#dc2626">⚠️ 拒绝风险：'+risk+'%</div><div style="font-size:10px;color:#ef4444;margin-top:3px;opacity:.85">'+riskDesc+'</div></div>':'';
   document.getElementById('renew-contract-content').innerHTML=`
@@ -1327,10 +1332,19 @@ function renderRenewModal(){
         </button>`;
       }).join('')}
     </div>
+    <div style="font-size:11px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:8px">选择报价</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+      ${[90,100,120,140,160,180].map(p=>`
+        <button class="btn btn-sm ${renewOfferPct===p?'btn-primary':''}" onclick="selectRenewOffer(${p})" style="padding:6px 2px;flex-direction:column;gap:1px">
+          <span style="font-size:12px;font-weight:600">${p}%</span>
+          <span style="font-size:9px;${p<100?'color:#16a34a':p===100?'opacity:.6':'color:#e65100'}">${p<100?'省钱':p===100?'标准':p<140?'加价':p<160?'诚意':'重金'}</span>
+        </button>`).join('')}
+    </div>
     <div style="background:#f8f9fa;border-radius:10px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:11px;color:#bbb;margin-bottom:4px">预计续签费用</div>
       <div style="font-size:22px;font-weight:800;color:${affordable?'#1a1a1a':'#dc2626'}">${cost} 万</div>
-      <div style="font-size:10px;color:#ccc;margin-top:3px">基础${base}万 × ${durMult}（时长）× ${attMult.toFixed(2)}（态度）</div>
+      <div style="font-size:10px;color:#ccc;margin-top:3px">标准${suggested}万 · 基础${base}万 × ${durMult}（时长）× ${attMult.toFixed(2)}（态度）</div>
+      <div style="font-size:10px;color:#999;margin-top:4px">当前报价 ${offerPct}% · 成功率 ${success}%</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="closeRenewModal()" style="flex:1;justify-content:center">取消</button>
@@ -1341,12 +1355,12 @@ function renderRenewModal(){
 }
 
 function selectRenewDuration(m){renewMonths=m;renderRenewModal();}
+function selectRenewOffer(p){renewOfferPct=p;renderRenewModal();}
 
 function confirmRenew(){
   const a=G.artists[renewIdx];
-  const{cost}=calcRenewCost(a,renewMonths);
+  const{cost,risk}=calcRenewCost(a,renewMonths,renewOfferPct);
   if(G.money<cost){toast('资金不足 '+cost+' 万','error');return;}
-  const risk=renewRejectRate(a);
   if(risk>0&&Math.floor(Math.random()*100)<risk){
     closeRenewModal();
     a.wantLeave=true;
@@ -1375,7 +1389,7 @@ function closeRenewModal(){
 function retainArtist(i){
   const a=G.artists[i];
   if(!a||!a.wantLeave) return;
-  const{cost}=calcRenewCost(a,24);
+  const{cost}=calcRenewCost(a,24,100);
   const retainCost=Math.round(cost*1.5);
   if(G.money<retainCost){toast('资金不足 '+retainCost+' 万（挽留费用）','error');return;}
   if(!confirm('花费 '+retainCost+' 万 挽留 '+displayName(a)+'？\n（费用为正常续签的1.5倍，必定成功，续签24个月）')) return;
