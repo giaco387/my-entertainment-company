@@ -1541,6 +1541,7 @@ function renderArtistList(){
           ${a.dance>60?'<span class="tag dance">舞</span>':''}
           ${a.acting>60?'<span class="tag acting">演</span>':''}
           ${a.rap>60?'<span class="tag rap">说唱</span>':''}
+          ${(a.status!=='休息中'&&(a.energy??80)<=30)?'<span class="tag" style="background:#fee2e2;color:#c62828">需休息</span>':''}
           <span class="status-badge ${statusCls(a.status)}">${a.status}</span>
           ${a.direction?`<span class="direction-badge dir-${dirClass(a.direction)}">${dirIcon(a.direction)} ${a.direction}</span>`:''}
           ${a.status==='已出道'?`<button class="btn btn-sm" style="font-size:10px;padding:2px 7px;height:auto;line-height:1.6" onclick="openDirectionSelect(${i})">${a.direction?'换方向':'选方向'}</button>`:''}
@@ -2815,15 +2816,31 @@ function updateSidebar(){
   const lv=G.fame<200?'⭐ 初创公司':G.fame<800?'⭐⭐ 新兴公司':G.fame<2500?'⭐⭐⭐ 知名公司':G.fame<8000?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
   document.getElementById('company-level').textContent=lv;
   const lowEnergy=G.artists.filter(a=>a.status!=='休息中'&&(a.energy??80)<=30);
+  const lowEnergyNames=lowEnergy.map(a=>displayName(a));
   const badge=document.getElementById('artist-energy-badge');
-  if(lowEnergy.length){badge.textContent=lowEnergy.length;badge.style.display='';}
-  else badge.style.display='none';
+  if(lowEnergy.length){
+    badge.textContent=lowEnergy.length;
+    badge.title='需休息：'+lowEnergyNames.join('、');
+    badge.style.display='';
+  } else {
+    badge.style.display='none';
+    badge.title='';
+  }
   const expiringContracts=G.artists.filter(a=>a.wantLeave||((a.contractEnd||G.month+24)-G.month)<=6);
   const cbadge=document.getElementById('artist-contract-badge');
   if(expiringContracts.length){cbadge.textContent=expiringContracts.length;cbadge.style.display='';}
   else cbadge.style.display='none';
   const tb=document.getElementById('tab-badge-train');
-  if(tb){if(lowEnergy.length){tb.textContent=lowEnergy.length;tb.style.display='';}else tb.style.display='none';}
+  if(tb){
+    if(lowEnergy.length){
+      tb.textContent=lowEnergy.length;
+      tb.title='需休息：'+lowEnergyNames.join('、');
+      tb.style.display='';
+    } else {
+      tb.style.display='none';
+      tb.title='';
+    }
+  }
   const tcb=document.getElementById('tab-badge-contracts');
   if(tcb){if(expiringContracts.length){tcb.textContent=expiringContracts.length;tcb.style.display='';}else tcb.style.display='none';}
   updateNavUnlocks();
