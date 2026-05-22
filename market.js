@@ -16,7 +16,7 @@ const TREND_POOL = [
   { id:'training_boost',name:'精英训练营热度',   icon:'🎓', cat:'艺人',   duration:2, bad:false,
     desc:'本月训练效率额外+40%' },
   { id:'music_award',   name:'年度音乐颁奖季',   icon:'🏆', cat:'活动',   duration:1, bad:false,
-    desc:'颁奖典礼声望奖励+80%' },
+    desc:'颁奖典礼知名度奖励+80%' },
   { id:'social_viral',  name:'社交媒体传播热潮', icon:'💬', cat:'运营',   duration:2, bad:false,
     desc:'粉丝运营所有行动效果+50%' },
   { id:'economy_down',  name:'广告市场下行',     icon:'📉', cat:'市场寒冬',duration:2, bad:true,

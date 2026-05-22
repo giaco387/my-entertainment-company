@@ -5,14 +5,14 @@ const ACHIEVEMENTS = [
   // ── 里程碑 ──────────────────────────────────────────────
   { id:'first_debut',    name:'初露锋芒', icon:'🌟', cat:'里程碑', desc:'第一位练习生成功出道',
     check() { return G.artists.some(a => a.status === '已出道' || a.status === '工作中'); } },
-  { id:'fame_800',       name:'新兴势力', icon:'📈', cat:'里程碑', desc:'公司声望达到800',
+  { id:'fame_800',       name:'新兴势力', icon:'📈', cat:'里程碑', desc:'公司知名度达到800',
     check() { return G.fame >= 800; } },
-  { id:'fame_2500',      name:'业界翘楚', icon:'🏅', cat:'里程碑', desc:'公司声望达到2500',
+  { id:'fame_2500',      name:'业界翘楚', icon:'🏅', cat:'里程碑', desc:'公司知名度达到2500',
     check() { return G.fame >= 2500; } },
-  { id:'fame_8000',      name:'娱乐帝国', icon:'👑', cat:'里程碑', desc:'声望达到8000，成为顶级娱乐帝国',
+  { id:'fame_8000',      name:'娱乐帝国', icon:'👑', cat:'里程碑', desc:'知名度达到8000，成为顶级娱乐帝国',
     check() { return G.fame >= 8000; } },
-  { id:'money_3000',     name:'财富自由', icon:'💰', cat:'里程碑', desc:'资金突破3000万',
-    check() { return G.money >= 3000; } },
+  { id:'money_3000',     name:'财富自由', icon:'💰', cat:'里程碑', desc:'资金突破20亿',
+    check() { return G.money >= 200000; } },
   { id:'month_24',       name:'两年老板', icon:'📅', cat:'里程碑', desc:'经营公司满24个月',
     check() { return G.month > 24; } },
 
@@ -25,7 +25,7 @@ const ACHIEVEMENTS = [
     check() { return G.artists.some(a => (a.fans || 0) >= 500); } },
   { id:'all_debut',      name:'全员出道', icon:'🎤', cat:'艺人', desc:'旗下至少3名艺人全部出道',
     check() { return G.artists.length >= 3 && G.artists.every(a => a.status === '已出道' || a.status === '工作中'); } },
-  { id:'pr_recovery',    name:'浴火重生', icon:'🔥', cat:'艺人', desc:'艺人从舆论危机恢复至口碑爆棚',
+  { id:'pr_recovery',    name:'浴火重生', icon:'🔥', cat:'艺人', desc:'艺人从口碑危机恢复至口碑爆棚',
     check() { return G.artists.some(a => a._hadCrisis && (a.pr || 60) >= 80); } },
   { id:'all_directions', name:'全能经纪人',icon:'🎭', cat:'艺人', desc:'旗下同时拥有歌手、演员、主持人、全能四种方向',
     check() {
