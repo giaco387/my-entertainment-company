@@ -792,7 +792,7 @@ function renderContent(){
 function renderReleaseCreator(){
   const el=document.getElementById('release-creator');
   if(!G.artists.length){el.innerHTML='<div style="font-size:13px;color:#999">请先在「艺人管理」签约练习生</div>';return;}
-  if(!contentCustomTitle){const tl=CONTENT_TITLES[contentTypeId];contentCustomTitle=tl[Math.floor(Math.random()*tl.length)];}
+  if(!contentCustomTitle){contentCustomTitle=pickUniqueContentTitle(contentTypeId);}
   const a=G.artists[contentArtistIdx]||G.artists[0];
   const busyLeft=a?artistReleaseBusyLeft(a):0;
   const canReleaseSelected=a&&(a.status==='已出道'||a.status==='工作中')&&busyLeft<=0;
@@ -845,17 +845,44 @@ function selectReleaseArtist(i){
 }
 function selectReleaseType(id){
   contentTypeId=id;
-  const titleList=CONTENT_TITLES[id];
-  contentCustomTitle=titleList[Math.floor(Math.random()*titleList.length)];
+  contentCustomTitle=pickUniqueContentTitle(id);
   renderReleaseCreator();
 }
 function refreshReleaseTitle(){
-  const titleList=CONTENT_TITLES[contentTypeId];
-  contentCustomTitle=titleList[Math.floor(Math.random()*titleList.length)];
+  contentCustomTitle=pickUniqueContentTitle(contentTypeId);
   renderReleaseCreator();
 }
 function updateReleaseTitle(val){
   contentCustomTitle=val;
+}
+
+function contentBaseTitle(title){
+  return String(title||'').replace(/^.+? - /,'').trim();
+}
+
+function usedContentTitles(){
+  const used=new Set();
+  [...(G.releases||[]),...(G.pendingReleases||[])].forEach(r=>{
+    const t=contentBaseTitle(r.title);
+    if(t) used.add(t);
+  });
+  return used;
+}
+
+function pickUniqueContentTitle(typeId){
+  const titleList=CONTENT_TITLES[typeId]||['新作品'];
+  const used=usedContentTitles();
+  const candidates=titleList.filter(t=>!used.has(t));
+  if(candidates.length) return candidates[Math.floor(Math.random()*candidates.length)];
+  const base=titleList[Math.floor(Math.random()*titleList.length)]||'新作品';
+  const suffixes=['II','特别版','2026','重制版','最终章'];
+  for(const suffix of suffixes){
+    const candidate=base+' '+suffix;
+    if(!used.has(candidate)) return candidate;
+  }
+  let n=2;
+  while(used.has(base+' '+n)) n++;
+  return base+' '+n;
 }
 
 function releaseContent(){
@@ -872,12 +899,14 @@ function releaseContent(){
   const titleList=CONTENT_TITLES[t.id];
   const inputEl=document.getElementById('rc-title-input');
   const rawTitle=(inputEl&&inputEl.value.trim())||contentCustomTitle||titleList[Math.floor(Math.random()*titleList.length)];
+  if(usedContentTitles().has(rawTitle)){toast('作品名「'+rawTitle+'」已使用，请换一个名称','error');return;}
   const title=displayName(a)+' - '+rawTitle;
   G.money-=t.cost;
   const goLiveAt=G.month+t.productionMonths;
   a.releaseBusyUntil=goLiveAt+t.duration;
   G.pendingReleases.push({type:t.id,artistName:displayName(a),artistNameRaw:a.name,title,releasedAt:goLiveAt,baseIncome:t.income(a),duration:t.duration,goLiveAt,productionMonths:t.productionMonths});
   addLog(title+' 制作费','minus',t.cost);
+  contentCustomTitle=pickUniqueContentTitle(contentTypeId);
   saveGame();renderContent();updateStats();checkAchievements();
   toast('🎬 「'+title+'」开始制作，'+t.productionMonths+'个月后正式发布！','success');
 }
