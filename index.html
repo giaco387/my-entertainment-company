@@ -414,6 +414,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       <button class="btn btn-sm" onclick="closeRecruit()">✕</button>
     </div>
     <div style="font-size:12px;color:#999;margin-bottom:12px">当前资金：<strong id="modal-money" style="color:#1a1a1a">1000</strong> 万</div>
+    <div style="margin-bottom:14px;padding:12px;border:1px solid #e8e5de;border-radius:12px;background:#fbfaf7">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:9px">
+        <div>
+          <div style="font-size:12px;font-weight:800;color:#1a1a1a">星探搜寻</div>
+          <div id="scout-info" style="font-size:10px;color:#999;margin-top:3px">已发现候选人 0 人</div>
+        </div>
+        <span id="scout-agent-badge" style="font-size:9px;font-weight:700;color:#7c3aed;background:#ede9fe;border:1px solid #c4b5fd;border-radius:99px;padding:2px 7px;display:none">资深星探加成</span>
+      </div>
+      <div id="scout-route-list" style="display:grid;grid-template-columns:1fr 1fr;gap:7px"></div>
+    </div>
     <div style="margin-bottom:14px">
       <div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px;letter-spacing:.5px">合同时长</div>
       <div style="display:flex;gap:5px">
@@ -513,7 +523,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 <script>
 const G = {
   money: 1000, fame: 12, month: 1,
-  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false, feed: [],
+  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false, feed: [], scoutedPool: [],
   monthlyIncome: 0, monthlyCost: 0,
   activeTrends: [], agents: [], rivals: [],
   pendingEvents: [], pendingReleases: [], pendingBuilds: [], timedEvents: [], lastAwardMonth: 0,
@@ -669,6 +679,8 @@ function loadGame(){
     if(G.businessActions.month===undefined) G.businessActions.month=G.month;
     if(G.businessActions.count===undefined) G.businessActions.count=0;
     if(!G.businessActions.used) G.businessActions.used={};
+    if(!G.scoutedPool) G.scoutedPool=[];
+    pruneScoutedPool();
     G.artists.forEach(a=>{if(a.energy===undefined) a.energy=80;});
     // 更新旧存档的 maxLv 上限
     const newMaxLv={live:8,practice:8,studio:8,mv:6,office:6,merch:6,media:6,health:6,legal:6,rehearsal:6,wardrobe:6,makeup:6};
@@ -1520,6 +1532,8 @@ function init(){
   if(!G.pendingReleases) G.pendingReleases=[];
   if(!G.buildingActions) G.buildingActions={};
   if(!G.unlockedTabs) G.unlockedTabs=[];
+  if(!G.scoutedPool) G.scoutedPool=[];
+  pruneScoutedPool();
   G.artists.forEach(a=>{
     if(a.pr===undefined) a.pr=60;
     if(!a.contractEnd) a.contractEnd=G.month+24;
@@ -2160,9 +2174,176 @@ function confirmEventWithArtists(){
   toast('🎬 '+ev.name+' 已开始！'+ev.duration+'个月后揭晓结果','success');
 }
 
+let recruitPool=[];
 let recruitContractMonths=24;
 function contractCostMult(m){return{12:0.7,24:1.0,36:1.25,48:1.5,60:1.75}[m]||1.0;}
 function calcRecruitCost(base){return Math.round(base*contractCostMult(recruitContractMonths));}
+
+const SCOUT_ROUTES=[
+  {id:'campus',label:'校园选拔',cost:25,count:3,desc:'稳定新人',focus:['singing','acting'],weights:{'普通':45,'良好':34,'优秀':15,'稀有':5,'✨传奇':1}},
+  {id:'street',label:'街头发掘',cost:40,count:3,desc:'舞台感更强',focus:['dance','rap'],weights:{'普通':34,'良好':36,'优秀':20,'稀有':8,'✨传奇':2}},
+  {id:'online',label:'网络达人',cost:55,count:4,desc:'初始粉丝更高',focus:['singing','rap'],weights:{'普通':30,'良好':34,'优秀':24,'稀有':10,'✨传奇':2},costMult:1.08,fanBonus:true},
+  {id:'overseas',label:'海外试训',cost:80,count:4,desc:'更容易出高潜',focus:['singing','dance','acting'],weights:{'普通':22,'良好':32,'优秀':28,'稀有':14,'✨传奇':4},costMult:1.15},
+];
+
+const SCOUT_RARITY_PROFILE={
+  '普通':{min:32,max:68,cost:[24,48]},
+  '良好':{min:44,max:78,cost:[42,76]},
+  '优秀':{min:56,max:88,cost:[72,118]},
+  '稀有':{min:66,max:96,cost:[108,168]},
+  '✨传奇':{min:78,max:99,cost:[165,240]},
+};
+const SCOUT_SURNAMES=['林','苏','顾','叶','沈','许','周','白','夏','秦','温','陆','江','程','宋','唐','黎','洛','纪','阮'];
+const SCOUT_GIVENS=['星遥','若宁','安澜','知夏','南乔','景行','云舒','鹿鸣','时雨','予安','青禾','洛尘','一澈','念初','以沫','清越','明栀','书言','晏辞','可颂'];
+const SCOUT_COLORS=[
+  {color:'#e0f2fe',tc:'#0369a1'},{color:'#fef3c7',tc:'#92400e'},{color:'#fce7f3',tc:'#831843'},
+  {color:'#dcfce7',tc:'#14532d'},{color:'#ede9fe',tc:'#4c1d95'},{color:'#fff1f2',tc:'#9f1239'},
+  {color:'#f0fdfa',tc:'#134e4a'},{color:'#eef2ff',tc:'#3730a3'}
+];
+const SCOUT_ZODIAC=['白羊座','金牛座','双子座','巨蟹座','狮子座','处女座','天秤座','天蝎座','射手座','摩羯座','水瓶座','双鱼座'];
+const SCOUT_HOMETOWNS=['北京','上海','广州','深圳','成都','杭州','南京','重庆','武汉','长沙','厦门','青岛','台北','香港','首尔','东京'];
+const SCOUT_PERSONALITIES=['清冷专注','元气外向','沉稳自律','灵气十足','反差感强','温柔坚定','镜头感强','野心明确'];
+const SCOUT_HOBBIES=['写歌·看展','街舞·滑板','拍短片·剪辑','健身·旅行','配音·读剧本','作曲·咖啡','时尚·摄影','说唱·球鞋'];
+const SCOUT_MBTI=['INFJ','INFP','ENFP','ENFJ','ISTP','ISFP','INTJ','ENTJ','ESFP','ESTP'];
+const SCOUT_DREAMS=['成为下一代顶流','完成万人巡演','拿到年度新人奖','推出代表作专辑','站上国际舞台','成为全能艺人','拍出破圈作品','打造个人厂牌'];
+const SCOUT_SPECIALTY={
+  singing:['声线辨识度','现场稳定度','高音爆发力','情绪唱腔'],
+  dance:['舞台律动','编舞理解','爆发型舞蹈','镜头走位'],
+  acting:['镜头表现','角色理解','情绪共情','台词质感'],
+  rap:['词曲创作','节奏控制','即兴说唱','潮流表达']
+};
+
+function scoutPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function scoutRand(min,max){return Math.floor(min+Math.random()*(max-min+1));}
+function scoutClamp(n){return Math.max(20,Math.min(99,Math.round(n)));}
+
+function pruneScoutedPool(){
+  if(!G.scoutedPool) G.scoutedPool=[];
+  const signed=new Set((G.artists||[]).map(a=>a.name));
+  G.scoutedPool=G.scoutedPool.filter(p=>p&&p.name&&!signed.has(p.name)&&(!p.expiresAt||p.expiresAt>G.month));
+}
+
+function scoutUniqueName(extraUsed=[]){
+  const used=new Set([
+    ...POOL.map(p=>p.name),
+    ...(G.artists||[]).map(a=>a.name),
+    ...(G.scoutedPool||[]).map(p=>p.name),
+    ...(recruitPool||[]).map(p=>p.name),
+    ...extraUsed,
+  ]);
+  for(let i=0;i<120;i++){
+    const name=scoutPick(SCOUT_SURNAMES)+scoutPick(SCOUT_GIVENS);
+    if(!used.has(name)) return name;
+  }
+  return scoutPick(SCOUT_SURNAMES)+scoutPick(SCOUT_GIVENS)+scoutRand(10,99);
+}
+
+function rollScoutRarity(route){
+  const weights={...route.weights};
+  if(hasAgent('scout')){
+    weights['普通']=Math.max(5,(weights['普通']||0)-10);
+    weights['优秀']=(weights['优秀']||0)+5;
+    weights['稀有']=(weights['稀有']||0)+4;
+    weights['✨传奇']=(weights['✨传奇']||0)+1;
+  }
+  const entries=Object.entries(weights);
+  const total=entries.reduce((s,entry)=>s+entry[1],0);
+  let roll=Math.random()*total;
+  for(const [rarity,weight] of entries){
+    roll-=weight;
+    if(roll<=0) return rarity;
+  }
+  return '普通';
+}
+
+function createScoutedCandidate(route, extraUsed=[]){
+  const rarity=rollScoutRarity(route);
+  const profile=SCOUT_RARITY_PROFILE[rarity]||SCOUT_RARITY_PROFILE['普通'];
+  const stats={
+    singing:scoutRand(profile.min,profile.max),
+    dance:scoutRand(profile.min,profile.max),
+    acting:scoutRand(profile.min,profile.max),
+    rap:scoutRand(profile.min,profile.max),
+  };
+  const focus=scoutPick(route.focus);
+  stats[focus]=scoutClamp(stats[focus]+scoutRand(8,18));
+  if(rarity==='稀有'||rarity==='✨传奇'){
+    Object.keys(stats).forEach(k=>{stats[k]=scoutClamp(stats[k]+scoutRand(2,8));});
+  }
+  const strongest=Object.entries(stats).sort((a,b)=>b[1]-a[1])[0][0];
+  const avg=Math.round((stats.singing+stats.dance+stats.acting+stats.rap)/4);
+  const color=scoutPick(SCOUT_COLORS);
+  const name=scoutUniqueName(extraUsed);
+  let cost=Math.round((scoutRand(profile.cost[0],profile.cost[1])+avg*0.35)*(route.costMult||1));
+  if(hasAgent('scout')) cost=Math.max(20,Math.round(cost*0.94));
+  return {
+    name,abbr:Array.from(name).slice(-1)[0],color:color.color,tc:color.tc,
+    ...stats,cost,rarity,
+    age:scoutRand(18,25),height:scoutRand(160,185),weight:scoutRand(45,76),
+    zodiac:scoutPick(SCOUT_ZODIAC),hometown:scoutPick(SCOUT_HOMETOWNS),
+    personality:scoutPick(SCOUT_PERSONALITIES),hobby:scoutPick(SCOUT_HOBBIES),
+    mbti:scoutPick(SCOUT_MBTI),dream:scoutPick(SCOUT_DREAMS),
+    specialty:scoutPick(SCOUT_SPECIALTY[strongest]),
+    startFans:route.fanBonus?scoutRand(6,14):scoutRand(1,4),
+    isScouted:true,source:route.label,scoutedAt:G.month,expiresAt:G.month+3
+  };
+}
+
+function refreshRecruitPool(){
+  pruneScoutedPool();
+  const signed=new Set(G.artists.map(a=>a.name));
+  const discovered=(G.scoutedPool||[]).filter(p=>!signed.has(p.name));
+  const blocked=new Set([...signed,...discovered.map(p=>p.name)]);
+  const available=POOL.filter(p=>!blocked.has(p.name));
+  recruitPool=[
+    ...discovered,
+    ...[...available].sort(()=>Math.random()-0.5).slice(0,hasAgent('scout')?6:4)
+  ];
+}
+
+function renderScoutRoutes(){
+  pruneScoutedPool();
+  const moneyEl=document.getElementById('modal-money');
+  if(moneyEl) moneyEl.textContent=G.money;
+  const info=document.getElementById('scout-info');
+  if(info){
+    const remain=(G.scoutedPool||[]).map(p=>(p.expiresAt||G.month)-G.month).filter(n=>n>0);
+    const expireText=remain.length?' · 最短'+Math.min(...remain)+'个月后失效':'';
+    info.textContent='已发现候选人 '+(G.scoutedPool||[]).length+' 人'+expireText;
+  }
+  const badge=document.getElementById('scout-agent-badge');
+  if(badge) badge.style.display=hasAgent('scout')?'inline-block':'none';
+  const el=document.getElementById('scout-route-list');
+  if(!el) return;
+  el.innerHTML=SCOUT_ROUTES.map(route=>{
+    const affordable=G.money>=route.cost;
+    const found=route.count+(hasAgent('scout')?1:0);
+    return `<button class="btn btn-sm" onclick="doScoutSearch('${route.id}')" ${affordable?'':'disabled'} style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px;opacity:${affordable?'1':'.5'}">
+      <span style="display:flex;justify-content:space-between;width:100%;gap:6px;font-size:11px;font-weight:800;color:#1a1a1a"><span>${route.label}</span><span>${route.cost}万</span></span>
+      <span style="font-size:9px;color:#999;text-align:left;line-height:1.4">${route.desc} · ${found}人</span>
+    </button>`;
+  }).join('');
+}
+
+function doScoutSearch(routeId){
+  const route=SCOUT_ROUTES.find(r=>r.id===routeId);
+  if(!route) return;
+  pruneScoutedPool();
+  if(G.money<route.cost){toast('资金不足 '+route.cost+' 万！','error');return;}
+  G.money-=route.cost;
+  const count=route.count+(hasAgent('scout')?1:0);
+  const found=[];
+  for(let i=0;i<count;i++){
+    found.push(createScoutedCandidate(route, found.map(p=>p.name)));
+  }
+  G.scoutedPool=[...found,...(G.scoutedPool||[])].slice(0,12);
+  addLog('星探搜寻·'+route.label,'minus',route.cost);
+  refreshRecruitPool();
+  renderRecruitList();
+  updateStats();updateOverview();saveGame();
+  pushFeed('🔎','星探通过'+route.label+'发现 '+found.length+' 名候选人','info');
+  toast('星探发现 '+found.length+' 名候选人，候选人将在3个月后失效','success');
+}
 
 function selectContractDuration(m){
   recruitContractMonths=m;
@@ -2195,7 +2376,11 @@ function artistPhotoHTML(p){
 
 function renderRecruitList(){
   const el=document.getElementById('recruit-list');
-  if(!recruitPool||!recruitPool.length) return;
+  renderScoutRoutes();
+  if(!recruitPool||!recruitPool.length){
+    el.innerHTML='<div style="grid-column:1/-1;padding:20px;text-align:center;color:#999;font-size:12px;border:1px dashed #e8e5de;border-radius:12px;background:#fbfaf7">暂无可招募候选人，可以先安排星探搜寻</div>';
+    return;
+  }
   el.innerHTML=recruitPool.map((p,i)=>{
     const cost=calcRecruitCost(p.cost);
     const affordable=G.money>=cost;
@@ -2203,10 +2388,13 @@ function renderRecruitList(){
     const rs=RARITY_STYLE[p.rarity]||RARITY_STYLE['普通'];
     const acceptRate=recruitAcceptRate(p);
     const arColor=acceptRate>=90?'#86efac':acceptRate>=70?'#fde68a':'#fca5a5';
+    const scoutTag=p.isScouted?'<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">星探 · '+p.source+'</div>':'';
+    const scoutNote=p.isScouted?'<div style="font-size:10px;color:#8b5cf6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:5px 7px;margin-bottom:8px;display:flex;justify-content:space-between"><span>星探候选</span><span>'+Math.max(1,(p.expiresAt||G.month+1)-G.month)+'个月后失效</span></div>':'';
     return `
     <div style="border-radius:14px;overflow:hidden;background:#fff;border:1.5px solid ${affordable?'#e8e5de':'#f0ede6'};${affordable?'':'opacity:.55'};transition:box-shadow .15s" onmouseenter="this.style.boxShadow='0 4px 16px rgba(0,0,0,.10)'" onmouseleave="this.style.boxShadow=''">
       <div style="position:relative;aspect-ratio:3/4;overflow:hidden;background:${p.color};cursor:pointer" onclick="openArtistProfile(${i})">
         ${artistPhotoHTML(p)}
+        ${scoutTag}
         <div style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .2s;display:flex;align-items:center;justify-content:center"
              onmouseenter="this.style.background='rgba(0,0,0,.32)';this.querySelector('span').style.opacity='1'"
              onmouseleave="this.style.background='rgba(0,0,0,0)';this.querySelector('span').style.opacity='0'">
@@ -2222,6 +2410,7 @@ function renderRecruitList(){
         </div>
       </div>
       <div style="padding:10px">
+        ${scoutNote}
         <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px">
           ${[['唱',p.singing,'#3b82f6'],['舞',p.dance,'#f59e0b'],['演',p.acting,'#22c55e'],['说',p.rap,'#ec4899']].map(([lbl,val,clr])=>`
           <div style="display:flex;align-items:center;gap:5px;font-size:10px">
@@ -2243,11 +2432,9 @@ function renderRecruitList(){
 function openRecruit(){
   const maxArtists=2+G.buildings.office.lv*2;
   if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
-  const signed=new Set(G.artists.map(a=>a.name));
-  const available=POOL.filter(p=>!signed.has(p.name));
-  if(!available.length){toast('所有练习生都已签约！','error');return;}
-  recruitPool=[...available].sort(()=>Math.random()-0.5).slice(0,hasAgent('scout')?6:4);
+  refreshRecruitPool();
   document.getElementById('modal-money').textContent=G.money;
+  renderScoutRoutes();
   selectContractDuration(recruitContractMonths);
   document.getElementById('modal-recruit').classList.add('open');
 }
@@ -2265,7 +2452,9 @@ function recruit(i){
     return;
   }
   G.money-=cost;
-  G.artists.push({...p,status:'训练中',fans:Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:cost,pr:60,energy:100,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
+  G.scoutedPool=(G.scoutedPool||[]).filter(sp=>sp.name!==p.name);
+  const {isScouted,source,scoutedAt,expiresAt,startFans,...artistData}=p;
+  G.artists.push({...artistData,status:'训练中',fans:startFans||Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalCost:cost,pr:60,energy:100,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
   addLog('签约'+p.name+'（'+recruitContractMonths+'个月）','minus',cost);
   updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();checkAchievements();maybeRefreshArtistScene();closeRecruit();
   pushFeed('🤝','签约 '+p.name+'（'+p.rarity+'）','good');
@@ -2284,6 +2473,7 @@ function openArtistProfile(i){
   const pRate=recruitAcceptRate(p);
   const pRateColor=pRate>=90?'#16a34a':pRate>=70?'#d97706':pRate>=50?'#ea580c':'#dc2626';
   const pRateHint=pRate<100?'<div style="margin-bottom:8px;padding:7px 12px;border-radius:8px;background:'+pRateColor+'18;border:1px solid '+pRateColor+'44;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:'+pRateColor+'">💭 接受率 '+pRate+'%</span><span style="font-size:10px;color:#999">'+(pRate>=90?'很可能接受签约':pRate>=70?'暧昧观望，可提升知名度':'可能拒绝，建议提升知名度')+'</span></div>':'';
+  const scoutProfileNote=p.isScouted?'<div style="margin-bottom:8px;padding:7px 12px;border-radius:8px;background:#f5f3ff;border:1px solid #ddd6fe;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:#7c3aed">🔎 星探候选 · '+p.source+'</span><span style="font-size:10px;color:#999">'+Math.max(1,(p.expiresAt||G.month+1)-G.month)+'个月后失效</span></div>':'';
   document.getElementById('artist-profile-content').innerHTML=`
   <div style="background:linear-gradient(135deg,${p.color},${p.color}99);padding:24px;display:flex;gap:18px;border-radius:20px 20px 0 0;align-items:flex-start">
     <div style="width:110px;height:147px;border-radius:12px;overflow:hidden;flex-shrink:0;box-shadow:0 6px 20px rgba(0,0,0,.2)">
@@ -2343,6 +2533,7 @@ function openArtistProfile(i){
     </div>
     <div style="border-top:1px solid #f0ede6;padding-top:14px">
       <div style="font-size:11px;color:#ccc;text-align:center;margin-bottom:10px">当前合约期 <strong style="color:#999">${recruitContractMonths}个月</strong>，可在招募列表调整</div>
+      ${scoutProfileNote}
       ${pRateHint}
       <div style="display:flex;gap:8px">
         <button class="btn btn-sm" onclick="closeArtistProfile()" style="flex:1;justify-content:center">← 返回</button>
@@ -2441,6 +2632,7 @@ function nextMonth(){
   G.usedEvents=[];
   G.usedEventArtists={};
   G.lastEvents=[];
+  pruneScoutedPool();
   if(!G.businessActions) G.businessActions={month:G.month,count:0,used:{}};
   if(G.businessActions.month!==G.month) G.businessActions={month:G.month,count:0,used:{}};
   let income=0,cost=0;
