@@ -1,14 +1,20 @@
 // 活动赛事（玩家主动参与，每月可选，需派艺人）
 // compute(sel) 根据所选艺人动态计算奖励
 // apply(sel, r) 执行效果并返回结果描述文字
+function eventReadyArtist(a){ return a && a.status !== '休息中'; }
+function publicArtist(a){ return a && (a.status === '已出道' || a.status === '工作中'); }
+function hasEventReadyArtist(predicate){ return G.artists.some(a => eventReadyArtist(a) && (!predicate || predicate(a))); }
+function countPublicArtists(predicate){ return G.artists.filter(a => publicArtist(a) && (!predicate || predicate(a))).length; }
+function hasPublicArtist(predicate){ return countPublicArtists(predicate) > 0; }
+
 const EVENTS = [
   {
     name:'校园歌唱比赛', icon:'🎵', bg:'#f0fdf4',
     desc:'参加全市高校联合歌唱比赛，派出的歌手越多阵容越强',
     cost:5, minArtists:1, statHint:'唱技', duration:1,
-    req:'需要歌唱≥60的出道艺人',
-    check()    { return G.artists.some(a => a.singing >= 60 && (a.status === '已出道' || a.status === '工作中')); },
-    artistCheck(a) { return (a.status === '已出道' || a.status === '工作中') && a.singing >= 60; },
+    req:'需要歌唱≥60且未休息的艺人',
+    check()    { return hasEventReadyArtist(a => a.singing >= 60); },
+    artistCheck(a) { return eventReadyArtist(a) && a.singing >= 60; },
     compute(sel) {
       const best  = sel.reduce((b, a) => a.singing > b.singing ? a : b);
       const multi = 1 + 0.25 * (sel.length - 1);
@@ -24,9 +30,9 @@ const EVENTS = [
     name:'新人选秀综艺', icon:'📺', bg:'#eff6ff',
     desc:'参加热门选秀节目，多位艺人同台更能刷爆热度',
     cost:10, minArtists:1, statHint:'综合均值', duration:2,
-    req:'需出道艺人 ≥1 且知名度≥30',
-    check()    { return G.fame >= 30 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    req:'需未休息艺人≥1 且知名度≥30',
+    check()    { return G.fame >= 30 && hasEventReadyArtist(); },
+    artistCheck(a) { return eventReadyArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s, a) => s + (a.singing + a.dance + a.acting) / 3, 0) / sel.length;
       const multi = 1 + 0.3 * (sel.length - 1);
@@ -41,9 +47,9 @@ const EVENTS = [
     name:'品牌代言活动', icon:'💼', bg:'#fffbeb',
     desc:'接受品牌代言，派出艺人的粉丝总量决定代言费',
     cost:0, minArtists:1, statHint:'粉丝量', duration:1,
-    req:'需知名度≥50 且出道艺人',
-    check()    { return G.fame >= 50 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    req:'需知名度≥50 且有出道/工作中艺人',
+    check()    { return G.fame >= 50 && hasPublicArtist(); },
+    artistCheck(a) { return publicArtist(a); },
     compute(sel) {
       const totalFans = sel.reduce((s, a) => s + (a.fans || 0), 0);
       return { fame: Math.round(8 + totalFans * 0.08), money: Math.round(60 + totalFans * 1.2) };
@@ -58,8 +64,8 @@ const EVENTS = [
     desc:'举办演唱会，多位艺人联合出演票房翻倍增长',
     cost:50, minArtists:2, statHint:'唱+舞均值', duration:2,
     req:'需出道艺人≥2 且知名度≥80',
-    check()    { return G.artists.filter(a => a.status === '已出道' || a.status === '工作中').length >= 2 && G.fame >= 80; },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    check()    { return countPublicArtists() >= 2 && G.fame >= 80; },
+    artistCheck(a) { return publicArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s, a) => s + (a.singing + a.dance) / 2, 0) / sel.length;
       const multi = 1 + 0.4 * (sel.length - 1);
@@ -74,9 +80,9 @@ const EVENTS = [
     name:'影视剧拍摄', icon:'🎬', bg:'#fef2f2',
     desc:'接下影视剧主演邀约，演技高的艺人能赢得更好口碑',
     cost:60, minArtists:1, statHint:'演技', duration:3,
-    req:'需演技≥70的出道艺人 且知名度≥60',
-    check()    { return G.fame >= 60 && G.artists.some(a => a.acting >= 70 && (a.status === '已出道' || a.status === '工作中')); },
-    artistCheck(a) { return (a.status === '已出道' || a.status === '工作中') && a.acting >= 70; },
+    req:'需演技≥70且未休息的艺人，知名度≥60',
+    check()    { return G.fame >= 60 && hasEventReadyArtist(a => a.acting >= 70); },
+    artistCheck(a) { return eventReadyArtist(a) && a.acting >= 70; },
     compute(sel) {
       const best  = sel.reduce((b, a) => a.acting > b.acting ? a : b);
       const multi = 1 + 0.2 * (sel.length - 1);
@@ -93,8 +99,8 @@ const EVENTS = [
     desc:'登上顶级音乐节舞台，多艺人联合出阵人气爆发',
     cost:40, minArtists:2, statHint:'唱+舞均值', duration:2,
     req:'需出道艺人≥2 且知名度≥100',
-    check()    { return G.fame >= 100 && G.artists.filter(a => a.status === '已出道' || a.status === '工作中').length >= 2; },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    check()    { return G.fame >= 100 && countPublicArtists() >= 2; },
+    artistCheck(a) { return publicArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s, a) => s + (a.singing + a.dance) / 2, 0) / sel.length;
       const multi = 1 + 0.5 * (sel.length - 1);
@@ -109,9 +115,9 @@ const EVENTS = [
     name:'直播带货', icon:'📱', bg:'#fffbeb',
     desc:'艺人开直播卖货，粉丝越多销售额越高',
     cost:0, minArtists:1, statHint:'粉丝量', duration:1,
-    req:'需粉丝≥10万的出道艺人',
-    check()    { return G.artists.some(a => (a.fans || 0) >= 10 && (a.status === '已出道' || a.status === '工作中')); },
-    artistCheck(a) { return (a.status === '已出道' || a.status === '工作中') && (a.fans || 0) >= 10; },
+    req:'需粉丝≥10万且未休息的艺人',
+    check()    { return hasEventReadyArtist(a => (a.fans || 0) >= 10); },
+    artistCheck(a) { return eventReadyArtist(a) && (a.fans || 0) >= 10; },
     compute(sel) {
       const totalFans = sel.reduce((s, a) => s + (a.fans || 0), 0);
       const multi = 1 + 0.15 * (sel.length - 1);
@@ -126,9 +132,9 @@ const EVENTS = [
     name:'慈善义演', icon:'❤️', bg:'#fdf4ff',
     desc:'举办公益演出，提升口碑与社会形象，收益虽少但声誉大涨',
     cost:0, minArtists:1, statHint:'口碑', duration:1,
-    req:'需出道艺人 ≥1 且知名度≥20',
-    check()    { return G.fame >= 20 && G.artists.some(a => a.status === '已出道' || a.status === '工作中'); },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    req:'需未休息艺人≥1 且知名度≥20',
+    check()    { return G.fame >= 20 && hasEventReadyArtist(); },
+    artistCheck(a) { return eventReadyArtist(a); },
     compute(sel) {
       const multi = 1 + 0.3 * (sel.length - 1);
       return { fame: Math.round(30 * multi), money: Math.round(10 * multi) };
@@ -144,8 +150,8 @@ const EVENTS = [
     desc:'走向国际舞台，高费用高回报，解锁海外粉丝群体',
     cost:120, minArtists:2, statHint:'唱+舞+演技', duration:3,
     req:'需出道艺人≥2 且知名度≥250',
-    check()    { return G.fame >= 250 && G.artists.filter(a => a.status === '已出道' || a.status === '工作中').length >= 2; },
-    artistCheck(a) { return a.status === '已出道' || a.status === '工作中'; },
+    check()    { return G.fame >= 250 && countPublicArtists() >= 2; },
+    artistCheck(a) { return publicArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s, a) => s + (a.singing + a.dance + a.acting) / 3, 0) / sel.length;
       const multi = 1 + 0.35 * (sel.length - 1);
@@ -290,10 +296,10 @@ const TIMED_EVENTS = [
     name:'综艺节目录制邀请', icon:'🎙️', bg:'#fef9c3',
     desc:'知名综艺节目向旗下艺人发出录制邀请，时不我待！',
     cost:5, minArtists:1, statHint:'综合均值', duration:2,
-    req:'旗下总粉丝≥5万',
+    req:'旗下总粉丝≥5万，且有未休息艺人',
     spawnChance: 0.20,
-    check()      { return G.artists.reduce((s,a)=>s+(a.fans||0),0) >= 5; },
-    artistCheck(a){ return a.status === '已出道' || a.status === '工作中'; },
+    check()      { return G.artists.reduce((s,a)=>s+(a.fans||0),0) >= 5 && hasEventReadyArtist(); },
+    artistCheck(a){ return eventReadyArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s,a)=>s+(a.singing+a.dance+a.acting)/3,0)/sel.length;
       const multi = 1 + 0.3*(sel.length-1);
@@ -309,10 +315,10 @@ const TIMED_EVENTS = [
     name:'电影宣传配合活动', icon:'🎬', bg:'#fef2f2',
     desc:'某大制作电影邀请旗下演技派艺人参与宣传，曝光机会难得！',
     cost:15, minArtists:1, statHint:'演技', duration:2,
-    req:'旗下有演技≥65的出道艺人',
+    req:'旗下有演技≥65且未休息的艺人',
     spawnChance: 0.18,
-    check()      { return G.artists.some(a=>a.acting>=65&&(a.status==='已出道'||a.status==='工作中')); },
-    artistCheck(a){ return (a.status==='已出道'||a.status==='工作中')&&a.acting>=65; },
+    check()      { return hasEventReadyArtist(a=>a.acting>=65); },
+    artistCheck(a){ return eventReadyArtist(a)&&a.acting>=65; },
     compute(sel) {
       const best  = sel.reduce((b,a)=>a.acting>b.acting?a:b);
       const multi = 1+0.2*(sel.length-1);
@@ -329,10 +335,10 @@ const TIMED_EVENTS = [
     name:'品牌快闪合作', icon:'🏪', bg:'#fffbeb',
     desc:'知名品牌邀请举办限时快闪活动，窗口期只有两个月！',
     cost:8, minArtists:1, statHint:'粉丝量', duration:1,
-    req:'公司知名度≥60',
+    req:'公司知名度≥60，且有未休息艺人',
     spawnChance: 0.20,
-    check()      { return G.fame>=60&&G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); },
-    artistCheck(a){ return a.status==='已出道'||a.status==='工作中'; },
+    check()      { return G.fame>=60&&hasEventReadyArtist(); },
+    artistCheck(a){ return eventReadyArtist(a); },
     compute(sel) {
       const totalFans=sel.reduce((s,a)=>s+(a.fans||0),0);
       return { fame: Math.round(10+totalFans*0.1), money: Math.round(80+totalFans*1.5) };
@@ -347,11 +353,11 @@ const TIMED_EVENTS = [
     name:'跨年晚会演出', icon:'🌃', bg:'#f0f9ff',
     desc:'顶级卫视跨年晚会向旗下艺人发来出演邀请，只在年末才有机会！',
     cost:20, minArtists:1, statHint:'唱+舞均值', duration:1,
-    req:'公司知名度≥120 且月份为11或12月',
+    req:'公司知名度≥120，月份为11或12月，且有出道/工作中艺人',
     spawnChance: 0.90,
     yearEnd: true,
-    check()      { return G.fame>=120&&G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); },
-    artistCheck(a){ return a.status==='已出道'||a.status==='工作中'; },
+    check()      { return G.fame>=120&&hasPublicArtist(); },
+    artistCheck(a){ return publicArtist(a); },
     compute(sel) {
       const avg   = sel.reduce((s,a)=>s+(a.singing+a.dance)/2,0)/sel.length;
       const multi = 1+0.4*(sel.length-1);
@@ -368,10 +374,10 @@ const TIMED_EVENTS = [
     name:'公益联唱活动', icon:'🎤', bg:'#ecfdf5',
     desc:'多家公司联合举办公益演唱，参与即可提升口碑与社会形象',
     cost:0, minArtists:1, statHint:'口碑', duration:1,
-    req:'旗下有已出道艺人',
+    req:'旗下有未休息艺人',
     spawnChance: 0.15,
-    check()      { return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); },
-    artistCheck(a){ return a.status==='已出道'||a.status==='工作中'; },
+    check()      { return hasEventReadyArtist(); },
+    artistCheck(a){ return eventReadyArtist(a); },
     compute(sel) {
       const multi=1+0.25*(sel.length-1);
       return { fame: Math.round(20*multi), money: Math.round(5*multi) };
