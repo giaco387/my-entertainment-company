@@ -793,16 +793,23 @@ function renderReleaseCreator(){
   const el=document.getElementById('release-creator');
   if(!G.artists.length){el.innerHTML='<div style="font-size:13px;color:#999">请先在「艺人管理」签约练习生</div>';return;}
   if(!contentCustomTitle){const tl=CONTENT_TITLES[contentTypeId];contentCustomTitle=tl[Math.floor(Math.random()*tl.length)];}
-  const debutedArtists=G.artists.filter(a=>a.status==='已出道'||a.status==='工作中');
+  const a=G.artists[contentArtistIdx]||G.artists[0];
+  const busyLeft=a?artistReleaseBusyLeft(a):0;
+  const canReleaseSelected=a&&(a.status==='已出道'||a.status==='工作中')&&busyLeft<=0;
   el.innerHTML=`
     <div style="margin-bottom:14px">
       <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">选择艺人</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px" id="rc-artists">
-        ${G.artists.map((a,i)=>`<button onclick="selectReleaseArtist(${i})" id="rca-${i}" class="btn btn-sm" style="display:flex;align-items:center;gap:5px;${contentArtistIdx===i?'background:#1a1a1a;color:#fff;border-color:#1a1a1a':''}">
+        ${G.artists.map((a,i)=>{
+          const left=artistReleaseBusyLeft(a);
+          const available=(a.status==='已出道'||a.status==='工作中')&&left<=0;
+          return `<button onclick="selectReleaseArtist(${i})" id="rca-${i}" class="btn btn-sm" title="${left>0?'宣传/制作期中，还需'+left+'个月':''}" style="display:flex;align-items:center;gap:5px;${contentArtistIdx===i?'background:#1a1a1a;color:#fff;border-color:#1a1a1a':''}${!available?'opacity:.45;':''}">
           <span style="width:22px;height:22px;border-radius:50%;background:${a.color};color:${a.tc};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${a.abbr}</span>
-          ${displayName(a)}
-        </button>`).join('')}
+          ${displayName(a)}${left>0?'<span style="font-size:10px;color:#e65100"> · '+left+'月</span>':''}
+        </button>`;
+        }).join('')}
       </div>
+      ${busyLeft>0?`<div style="font-size:11px;color:#e65100;margin-top:8px;background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:7px 9px">⏳ ${displayName(a)} 上个作品还在制作/宣传期，还需 ${busyLeft} 个月才能发行新作品。</div>`:''}
     </div>
     <div style="margin-bottom:14px">
       <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">内容类型</div>
@@ -823,9 +830,13 @@ function renderReleaseCreator(){
         <button class="btn btn-sm" onclick="refreshReleaseTitle()" title="换一个随机名称" style="flex-shrink:0;padding:8px 10px">🎲</button>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="releaseContent()" style="width:100%;justify-content:center;padding:10px">
-      🚀 确认发行
+    <button class="btn btn-primary" onclick="releaseContent()" ${canReleaseSelected?'':'disabled'} style="width:100%;justify-content:center;padding:10px">
+      ${canReleaseSelected?'🚀 确认发行':'⏳ 艺人暂不可发行'}
     </button>`;
+}
+
+function artistReleaseBusyLeft(a){
+  return Math.max(0,(a.releaseBusyUntil||0)-G.month);
 }
 
 function selectReleaseArtist(i){
@@ -851,6 +862,9 @@ function releaseContent(){
   if(!G.artists.length){toast('请先签约艺人','error');return;}
   const a=G.artists[contentArtistIdx];
   if(!a){toast('请选择艺人','error');return;}
+  if(a.status!=='已出道'&&a.status!=='工作中'){toast('只有出道艺人才能发行内容','error');return;}
+  const busyLeft=artistReleaseBusyLeft(a);
+  if(busyLeft>0){toast(displayName(a)+' 仍在作品制作/宣传期，还需 '+busyLeft+' 个月','error');return;}
   const t=CONTENT_TYPES.find(x=>x.id===contentTypeId);
   if(!t){toast('请选择内容类型','error');return;}
   if(!t.check()){toast('设施条件不满足：'+t.req,'error');return;}
@@ -861,7 +875,8 @@ function releaseContent(){
   const title=displayName(a)+' - '+rawTitle;
   G.money-=t.cost;
   const goLiveAt=G.month+t.productionMonths;
-  G.pendingReleases.push({type:t.id,artistName:displayName(a),title,releasedAt:goLiveAt,baseIncome:t.income(a),duration:t.duration,goLiveAt,productionMonths:t.productionMonths});
+  a.releaseBusyUntil=goLiveAt+t.duration;
+  G.pendingReleases.push({type:t.id,artistName:displayName(a),artistNameRaw:a.name,title,releasedAt:goLiveAt,baseIncome:t.income(a),duration:t.duration,goLiveAt,productionMonths:t.productionMonths});
   addLog(title+' 制作费','minus',t.cost);
   saveGame();renderContent();updateStats();checkAchievements();
   toast('🎬 「'+title+'」开始制作，'+t.productionMonths+'个月后正式发布！','success');
@@ -1480,6 +1495,7 @@ function init(){
     if(a.pr===undefined) a.pr=60;
     if(!a.contractEnd) a.contractEnd=G.month+24;
     if(!a.lastFanOp) a.lastFanOp=0;
+    if(a.releaseBusyUntil&&a.releaseBusyUntil<=G.month) delete a.releaseBusyUntil;
   });
   if(!G.rivals.length) initRivals();
   renderBuildings();renderBusiness();renderEvents();updateOverview();updateStats();updateSidebar();
@@ -2446,6 +2462,7 @@ function nextMonth(){
     if(r.type==='doc'){G.fame+=Math.max(1,Math.round(mult*4));}
     if(g>0){income+=g;addLog(r.title+' 发行收益','plus',g);}
   });
+  G.artists.forEach(a=>{if(a.releaseBusyUntil&&a.releaseBusyUntil<=G.month) delete a.releaseBusyUntil;});
   const exhausted=[];
   G.artists.forEach(a=>{
     if(a.energy===undefined) a.energy=80;
