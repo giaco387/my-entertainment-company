@@ -1,0 +1,2719 @@
+const G = {
+  money: 1000, fame: 12, month: 1,
+  artists: [], log: [], usedEvents: [], lastEvents: [], monthlyHistory: [], releases: [], streamingDeal: false, feed: [], scoutedPool: [],
+  monthlyIncome: 0, monthlyCost: 0,
+  activeTrends: [], agents: [], rivals: [],
+  pendingEvents: [], pendingReleases: [], pendingBuilds: [], timedEvents: [], lastAwardMonth: 0,
+  buildingActions: {},
+  buildings: {
+    live:     {name:'直播基地',    lv:0, maxLv:8, icon:'📺', cost:80,  effect:'月收入来源'},
+    practice: {name:'训练室',      lv:1, maxLv:8, icon:'🎤', cost:60,  effect:'训练效率+20%/级'},
+    studio:   {name:'录音室',      lv:1, maxLv:8, icon:'🎙️', cost:100, effect:'音乐制作加成'},
+    mv:       {name:'MV拍摄间',    lv:0, maxLv:6, icon:'🎬', cost:200, effect:'发行收益+30%'},
+    office:   {name:'经纪办公室',  lv:1, maxLv:6, icon:'🏢', cost:50,  effect:'可签约+2人/级'},
+    merch:    {name:'周边商品部',  lv:0, maxLv:6, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
+    media:    {name:'媒体中心',    lv:0, maxLv:6, icon:'📡', cost:150, effect:'降低负面事件概率'},
+    health:   {name:'健康管理中心',lv:0, maxLv:6, icon:'🏥', cost:100, effect:'防艺人停工'},
+    legal:    {name:'法务部',      lv:0, maxLv:6, icon:'⚖️', cost:130, effect:'降低合同续签费'},
+    rehearsal:{name:'排练室',      lv:0, maxLv:6, icon:'💃', cost:90,  effect:'演出月收益+10%/级'},
+    wardrobe: {name:'服装间',      lv:0, maxLv:6, icon:'👗', cost:80,  effect:'粉丝增速+10%/级'},
+    makeup:   {name:'化妆间',      lv:0, maxLv:6, icon:'💄', cost:70,  effect:'月口碑+1/级'},
+  }
+};
+
+
+
+const COMPANY_SHARE_BY_RARITY={'普通':90,'良好':85,'优秀':80,'稀有':75,'✨传奇':70};
+function defaultCompanyShare(a){return COMPANY_SHARE_BY_RARITY[a?.rarity]||85;}
+function getCompanyShare(a){
+  const pct=a?.companyShare??defaultCompanyShare(a);
+  return Math.max(50,Math.min(95,Math.round(pct)));
+}
+function companyIncomeFromGross(gross,a){return Math.round(gross*getCompanyShare(a)/100);}
+function normalizeArtistFinance(a){
+  if(a.companyShare===undefined) a.companyShare=defaultCompanyShare(a);
+  if(a.totalGrossIncome===undefined) a.totalGrossIncome=a.totalIncome||0;
+  if(a.totalArtistShare===undefined) a.totalArtistShare=0;
+}
+function splitArtistIncome(a,gross){
+  const company=companyIncomeFromGross(gross,a);
+  const artist=Math.max(0,gross-company);
+  a.totalGrossIncome=(a.totalGrossIncome||0)+gross;
+  a.totalIncome=(a.totalIncome||0)+company;
+  a.totalArtistShare=(a.totalArtistShare||0)+artist;
+  return{company,artist,gross,pct:getCompanyShare(a)};
+}
+
+function displayName(a){return a.alias||a.name;}
+function staminaDrain(a,forTraining=false){
+  const base={'✨传奇':10,'稀有':12,'优秀':14,'良好':15,'普通':18}[a.rarity]||15;
+  return forTraining?Math.max(5,base-3):base;
+}
+function staminaRecovery(a){
+  const base={'✨传奇':38,'稀有':33,'优秀':30,'良好':28,'普通':22}[a.rarity]||28;
+  return base+(G.buildings?.health?.lv||0)*3;
+}
+function recruitAcceptRate(p){
+  const r={'✨传奇':[30,0.15,80],'稀有':[50,0.2,90],'优秀':[70,0.3,95]}[p.rarity];
+  if(!r) return 100;
+  return Math.min(r[2],Math.round(r[0]+G.fame*r[1]));
+}
+function renewRejectRate(a){
+  const remaining=(a.contractEnd||G.month+24)-G.month;
+  const overdue=remaining<0?-remaining:0;
+  let risk=0;
+  if(overdue>0) risk+=30+overdue*5;
+  if((a.pr||60)<=40) risk+=20;
+  if((a.energy??80)<=20&&a.status!=='休息中') risk+=15;
+  risk-=(G.buildings.legal?.lv||0)*5;
+  return Math.max(0,Math.min(80,risk));
+}
+function prBg(pr){return pr>=80?'#e8f5e9':pr>=60?'#e3f2fd':pr>=40?'#fff3e0':'#ffebee';}
+function prColor(pr){return pr>=80?'#2e7d32':pr>=60?'#1565c0':pr>=40?'#e65100':'#c62828';}
+function prLabel(pr){return pr>=80?'口碑爆棚':pr>=60?'口碑正常':pr>=40?'风波中':'口碑危机';}
+function dirClass(d){return {'歌手':'singer','演员':'actor','主持人':'host','全能':'allround'}[d]||'';}
+function dirIcon(d){return {'歌手':'🎤','演员':'🎭','主持人':'📺','全能':'⭐'}[d]||'';}
+
+function openAliasEdit(i){
+  currentAliasIdx=i;
+  const a=G.artists[i];
+  document.getElementById('alias-modal-title').textContent='为「'+a.name+'」设置艺名';
+  document.getElementById('alias-input').value=a.alias||'';
+  document.getElementById('modal-alias').classList.add('open');
+  setTimeout(()=>document.getElementById('alias-input').focus(),50);
+}
+function closeAliasEdit(){document.getElementById('modal-alias').classList.remove('open');}
+function saveAlias(){
+  if(currentAliasIdx<0) return;
+  const val=document.getElementById('alias-input').value.trim();
+  G.artists[currentAliasIdx].alias=val;
+  closeAliasEdit();
+  saveGame();renderArtistList();maybeRefreshArtistScene();
+  toast(val?'已设置艺名「'+val+'」':'已清除艺名','success');
+}
+
+function openDirectionSelect(i){
+  currentDirIdx=i;
+  const a=G.artists[i];
+  document.getElementById('direction-artist-name').textContent='为「'+displayName(a)+'」选择发展方向';
+  document.getElementById('direction-options').innerHTML=DIRECTIONS.map(d=>`
+    <div class="direction-card ${a.direction===d.id?'selected':''}" onclick="selectDirection('${d.id}')">
+      <div style="width:40px;height:40px;border-radius:10px;background:${d.color};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${d.icon}</div>
+      <div><div style="font-size:13px;font-weight:600;color:#1a1a1a">${d.id}</div><div style="font-size:11px;color:#666;margin-top:3px">${d.desc}</div></div>
+    </div>`).join('');
+  document.getElementById('modal-direction').classList.add('open');
+}
+function closeDirectionSelect(){document.getElementById('modal-direction').classList.remove('open');}
+function selectDirection(d){
+  if(currentDirIdx<0) return;
+  G.artists[currentDirIdx].direction=d;
+  closeDirectionSelect();
+  saveGame();renderArtistList();
+  toast('已选择发展方向：'+dirIcon(d)+' '+d,'success');
+}
+
+function pushFeed(icon, text, type='info'){
+  if(!G.feed) G.feed=[];
+  const y=Math.floor((G.month-1)/12)+1;
+  const mo=((G.month-1)%12)+1;
+  G.feed.unshift({icon, text:String(text).slice(0,55), type, label:'第'+y+'年'+mo+'月'});
+  if(G.feed.length>60) G.feed.length=60;
+  renderFeed();
+}
+
+function renderFeed(){
+  const el=document.getElementById('feed-list');
+  if(!el) return;
+  if(!G.feed||!G.feed.length){
+    el.innerHTML='<div style="padding:24px 14px;text-align:center;color:#d0cdc8;font-size:12px;line-height:2.2">还没有动态<br>推进游戏后<br>会在这里更新</div>';
+    return;
+  }
+  el.innerHTML=G.feed.map(item=>`
+    <div class="fi fi-${item.type}">
+      <div class="fi-month">${item.label}</div>
+      <div class="fi-body">${item.icon} ${item.text}</div>
+    </div>`).join('');
+}
+
+let _feedOpen=true;
+function toggleFeed(){
+  _feedOpen=!_feedOpen;
+  document.getElementById('feed-panel').classList.toggle('collapsed',!_feedOpen);
+  document.getElementById('feed-tab').textContent=_feedOpen?'动态':'动态';
+  document.querySelector('.content').style.paddingRight=_feedOpen?'250px':'20px';
+}
+
+function clearFeed(){
+  G.feed=[];
+  renderFeed();
+}
+
+function saveGame(){
+  localStorage.setItem('mec_save', JSON.stringify(G));
+}
+
+function loadGame(){
+  const raw=localStorage.getItem('mec_save');
+  if(!raw) return false;
+  try{
+    const saved=JSON.parse(raw);
+    Object.assign(G, saved);
+    // 补全旧存档缺失的建筑
+    const defaultBuildings={
+      merch: {name:'周边商品部', lv:0, maxLv:4, icon:'🛍️', cost:120, effect:'粉丝变现被动收益'},
+      media:    {name:'媒体中心',    lv:0, maxLv:4, icon:'📡', cost:150, effect:'降低负面事件概率'},
+      health:   {name:'健康管理中心',lv:0, maxLv:3, icon:'🏥', cost:100, effect:'防艺人停工'},
+      legal:    {name:'法务部',      lv:0, maxLv:4, icon:'⚖️', cost:130, effect:'降低合同续签费'},
+      rehearsal:{name:'排练室',      lv:0, maxLv:6, icon:'💃', cost:90,  effect:'演出月收益+10%/级'},
+      wardrobe: {name:'服装间',      lv:0, maxLv:6, icon:'👗', cost:80,  effect:'粉丝增速+10%/级'},
+      makeup:   {name:'化妆间',      lv:0, maxLv:6, icon:'💄', cost:70,  effect:'月口碑+1/级'},
+    };
+    Object.entries(defaultBuildings).forEach(([k,v])=>{if(!G.buildings[k]) G.buildings[k]=v;});
+    if(!G.pendingBuilds) G.pendingBuilds=[];
+    G.pendingBuilds=G.pendingBuilds.filter(p=>p.k!=='fanshall');
+    if(!G.lastAwardMonth) G.lastAwardMonth=0;
+    if(!G.timedEvents) G.timedEvents=[];
+    if(!G.businessActions) G.businessActions={month:G.month,count:0,used:{}};
+    if(G.businessActions.month===undefined) G.businessActions.month=G.month;
+    if(G.businessActions.count===undefined) G.businessActions.count=0;
+    if(!G.businessActions.used) G.businessActions.used={};
+    if(!G.scoutedPool) G.scoutedPool=[];
+    pruneScoutedPool();
+    G.artists.forEach(a=>{
+      if(a.energy===undefined) a.energy=80;
+      normalizeArtistFinance(a);
+    });
+    // 更新旧存档的 maxLv 上限
+    const newMaxLv={live:8,practice:8,studio:8,mv:6,office:6,merch:6,media:6,health:6,legal:6,rehearsal:6,wardrobe:6,makeup:6};
+    Object.entries(newMaxLv).forEach(([k,m])=>{if(G.buildings[k]&&G.buildings[k].maxLv<m) G.buildings[k].maxLv=m;});
+    if(G.buildings.fanshall) delete G.buildings.fanshall;
+    if(G.buildingActions&&G.buildingActions.fanshall) delete G.buildingActions.fanshall;
+    return true;
+  }catch(e){return false;}
+}
+
+function newGame(){
+  if(!confirm('确定开始新游戏吗？当前进度将清除！')) return;
+  localStorage.removeItem('mec_save');
+  location.reload();
+}
+
+function enterRoom(key){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('section-room').classList.add('active');
+  document.getElementById('nav-buildings').classList.add('active');
+  const b=G.buildings[key];
+  document.getElementById('room-icon-title').textContent=b.icon+' '+b.name;
+  document.getElementById('room-lv-badge').textContent='Lv.'+b.lv+'/'+b.maxLv;
+  const section=document.getElementById('section-room');
+  let bg=section.querySelector('.scene-bg');
+  if(!bg){bg=document.createElement('div');bg.className='scene-bg';section.insertBefore(bg,section.firstChild);}
+  bg.innerHTML=getRoomScene(key,b);
+  renderRoomArtistPanel();
+}
+
+function exitRoom(){showSection('buildings');}
+
+function renderRoomArtistPanel(){
+  const el=document.getElementById('room-artist-panel');
+  if(!G.artists.length){el.innerHTML='<div style="color:rgba(255,255,255,.38);font-size:12px">还没有签约艺人，前往艺人管理招募吧</div>';return;}
+  el.innerHTML=`<div style="font-size:10px;color:rgba(255,255,255,.4);margin-bottom:8px;font-weight:600;letter-spacing:.5px">在场艺人</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    ${G.artists.map(a=>`<div class="room-artist-chip">
+      <div style="width:38px;height:38px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid rgba(255,255,255,.35);box-shadow:0 2px 8px rgba(0,0,0,.4)">${a.abbr}</div>
+      <div style="font-size:9px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
+      <div class="status-badge ${statusCls(a.status)}" style="font-size:9px;padding:1px 5px">${a.status}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function roomSceneArtists(){
+  if(!G.artists.length) return `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,.22)">还没有艺人 ...</div>`;
+  const cnt=G.artists.length, sp=Math.min(88/(cnt+1),16);
+  return G.artists.map((a,i)=>{
+    const left=6+(i+1)*sp;
+    return `<div style="position:absolute;bottom:8px;left:${left}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div style="width:36px;height:36px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:2px solid rgba(255,255,255,.45);box-shadow:0 2px 10px rgba(0,0,0,.5)">${a.abbr}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.75);white-space:nowrap">${displayName(a)}</div>
+    </div>`;
+  }).join('');
+}
+
+function getRoomScene(key,b){
+  const imgs={live:'rooms/room-live.jpg',practice:'rooms/room-practice.jpg',studio:'rooms/room-studio.jpg',mv:'rooms/room-mv.jpg',office:'rooms/room-office.jpg'};
+  const accents={live:'linear-gradient(90deg,#2563eb,#4f46e5,#7c3aed,#4f46e5,#2563eb)',practice:'linear-gradient(90deg,#a3e635,#65a30d,#a3e635)',studio:'linear-gradient(90deg,#92400e,#f59e0b,#92400e)',mv:'linear-gradient(90deg,#7c3aed,#fff,#7c3aed)',office:'linear-gradient(90deg,#0ea5e9,#6366f1,#0ea5e9)'};
+  const extras={live:`<div style="position:absolute;top:12%;right:7%;padding:4px 10px;background:#dc2626;border-radius:4px;font-size:11px;font-weight:700;color:#fff;letter-spacing:1px;box-shadow:0 0 10px rgba(220,38,38,.5)">● LIVE</div>`};
+  const artists=roomSceneArtists();
+  return `
+    <div style="position:absolute;inset:0;background:url('${imgs[key]}') center/cover no-repeat"></div>
+    <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 50%,rgba(0,0,0,.55) 100%)"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:5px;background:${accents[key]||'#fff'}"></div>
+    ${extras[key]||''}
+    <div style="position:absolute;bottom:0;left:0;right:0;height:22%;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.82));border-top:2px solid rgba(255,255,255,.15)">
+      ${artists}
+    </div>`;
+}
+
+function renderScene(id){
+  const section=document.getElementById('section-'+id);
+  let bg=section.querySelector('.scene-bg');
+  if(!bg){bg=document.createElement('div');bg.className='scene-bg';section.insertBefore(bg,section.firstChild);}
+  section.classList.remove('dark-scene');
+  const fns={overview:sceneOverview,artists:sceneArtists,buildings:sceneBuildings,business:sceneBusiness,events:sceneEvents,finance:sceneFinance,content:sceneContent,achievements:sceneAchievements,market:sceneMarket,agents:sceneAgents,rivals:sceneRivals};
+  if(fns[id]) bg.innerHTML=fns[id]();
+}
+
+function maybeRefreshArtistScene(){
+  if(document.getElementById('section-artists').classList.contains('active')) renderScene('artists');
+}
+
+function sceneOverview(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneArtists(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneBuildings(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneEvents(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneFinance(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneContent(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+function sceneBusiness(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#fbfaf8 0%,#f5f4f0 100%)"></div>`;
+}
+
+function renderContent(){
+  renderReleaseCreator();
+  renderActiveReleases();
+  renderStreamingInfo();
+}
+
+function renderReleaseCreator(){
+  const el=document.getElementById('release-creator');
+  if(!G.artists.length){el.innerHTML='<div style="font-size:13px;color:#999">请先在「艺人管理」签约练习生</div>';return;}
+  if(!contentCustomTitle){contentCustomTitle=pickUniqueContentTitle(contentTypeId);}
+  const a=G.artists[contentArtistIdx]||G.artists[0];
+  const busyLeft=a?artistReleaseBusyLeft(a):0;
+  const canReleaseSelected=a&&(a.status==='已出道'||a.status==='工作中')&&busyLeft<=0;
+  el.innerHTML=`
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">选择艺人</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="rc-artists">
+        ${G.artists.map((a,i)=>{
+          const left=artistReleaseBusyLeft(a);
+          const available=(a.status==='已出道'||a.status==='工作中')&&left<=0;
+          return `<button onclick="selectReleaseArtist(${i})" id="rca-${i}" class="btn btn-sm" title="${left>0?'宣传/制作期中，还需'+left+'个月':''}" style="display:flex;align-items:center;gap:5px;${contentArtistIdx===i?'background:#1a1a1a;color:#fff;border-color:#1a1a1a':''}${!available?'opacity:.45;':''}">
+          <span style="width:22px;height:22px;border-radius:50%;background:${a.color};color:${a.tc};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${a.abbr}</span>
+          ${displayName(a)}${left>0?'<span style="font-size:10px;color:#e65100"> · '+left+'月</span>':''}
+        </button>`;
+        }).join('')}
+      </div>
+      ${busyLeft>0?`<div style="font-size:11px;color:#e65100;margin-top:8px;background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:7px 9px">⏳ ${displayName(a)} 上个作品还在制作/宣传期，还需 ${busyLeft} 个月才能发行新作品。</div>`:''}
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">内容类型</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="rc-types">
+        ${CONTENT_TYPES.map(t=>`<button onclick="selectReleaseType('${t.id}')" id="rct-${t.id}" class="btn" style="flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;${contentTypeId===t.id?'background:#f0ede6;border-color:#1a1a1a;':''}${!t.check()?'opacity:.4;':''}">
+          <div style="font-size:15px">${t.icon} <strong style="font-size:13px">${t.name}</strong> <span style="font-size:11px;color:#999;font-weight:400">${t.cost}万</span></div>
+          <div style="font-size:10px;color:#999">${t.req} · 制作${t.productionMonths}个月 · 热度${t.duration}个月</div>
+          <div style="font-size:10px;color:#2e7d32">预估首月收益 ~${Math.round(t.income(G.artists[contentArtistIdx]||G.artists[0])*1.5)}万</div>
+        </button>`).join('')}
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;font-weight:600">作品名称</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="rc-title-input" type="text" value="${contentCustomTitle||''}" oninput="updateReleaseTitle(this.value)"
+          style="flex:1;padding:8px 11px;border:1.5px solid #e8e5de;border-radius:8px;font-size:13px;outline:none;background:#fff;font-family:inherit"
+          placeholder="输入作品名称…" maxlength="30">
+        <button class="btn btn-sm" onclick="refreshReleaseTitle()" title="换一个随机名称" style="flex-shrink:0;padding:8px 10px">🎲</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="releaseContent()" ${canReleaseSelected?'':'disabled'} style="width:100%;justify-content:center;padding:10px">
+      ${canReleaseSelected?'🚀 确认发行':'⏳ 艺人暂不可发行'}
+    </button>`;
+}
+
+function artistReleaseBusyLeft(a){
+  return Math.max(0,(a.releaseBusyUntil||0)-G.month);
+}
+
+function selectReleaseArtist(i){
+  contentArtistIdx=i;
+  renderReleaseCreator();
+}
+function selectReleaseType(id){
+  contentTypeId=id;
+  contentCustomTitle=pickUniqueContentTitle(id);
+  renderReleaseCreator();
+}
+function refreshReleaseTitle(){
+  contentCustomTitle=pickUniqueContentTitle(contentTypeId);
+  renderReleaseCreator();
+}
+function updateReleaseTitle(val){
+  contentCustomTitle=val;
+}
+
+function contentBaseTitle(title){
+  return String(title||'').replace(/^.+? - /,'').trim();
+}
+
+function usedContentTitles(){
+  const used=new Set();
+  [...(G.releases||[]),...(G.pendingReleases||[])].forEach(r=>{
+    const t=contentBaseTitle(r.title);
+    if(t) used.add(t);
+  });
+  return used;
+}
+
+function pickUniqueContentTitle(typeId){
+  const titleList=CONTENT_TITLES[typeId]||['新作品'];
+  const used=usedContentTitles();
+  const candidates=titleList.filter(t=>!used.has(t));
+  if(candidates.length) return candidates[Math.floor(Math.random()*candidates.length)];
+  const base=titleList[Math.floor(Math.random()*titleList.length)]||'新作品';
+  const suffixes=['II','特别版','2026','重制版','最终章'];
+  for(const suffix of suffixes){
+    const candidate=base+' '+suffix;
+    if(!used.has(candidate)) return candidate;
+  }
+  let n=2;
+  while(used.has(base+' '+n)) n++;
+  return base+' '+n;
+}
+
+function releaseContent(){
+  if(!G.artists.length){toast('请先签约艺人','error');return;}
+  const a=G.artists[contentArtistIdx];
+  if(!a){toast('请选择艺人','error');return;}
+  if(a.status!=='已出道'&&a.status!=='工作中'){toast('只有出道艺人才能发行内容','error');return;}
+  const busyLeft=artistReleaseBusyLeft(a);
+  if(busyLeft>0){toast(displayName(a)+' 仍在作品制作/宣传期，还需 '+busyLeft+' 个月','error');return;}
+  const t=CONTENT_TYPES.find(x=>x.id===contentTypeId);
+  if(!t){toast('请选择内容类型','error');return;}
+  if(!t.check()){toast('设施条件不满足：'+t.req,'error');return;}
+  if(G.money<t.cost){toast('资金不足 '+t.cost+' 万','error');return;}
+  const titleList=CONTENT_TITLES[t.id];
+  const inputEl=document.getElementById('rc-title-input');
+  const rawTitle=(inputEl&&inputEl.value.trim())||contentCustomTitle||titleList[Math.floor(Math.random()*titleList.length)];
+  if(usedContentTitles().has(rawTitle)){toast('作品名「'+rawTitle+'」已使用，请换一个名称','error');return;}
+  const title=displayName(a)+' - '+rawTitle;
+  G.money-=t.cost;
+  const goLiveAt=G.month+t.productionMonths;
+  a.releaseBusyUntil=goLiveAt+t.duration;
+  G.pendingReleases.push({type:t.id,artistName:displayName(a),artistNameRaw:a.name,title,releasedAt:goLiveAt,baseIncome:t.income(a),duration:t.duration,goLiveAt,productionMonths:t.productionMonths});
+  addLog(title+' 制作费','minus',t.cost);
+  contentCustomTitle=pickUniqueContentTitle(contentTypeId);
+  saveGame();renderContent();updateStats();checkAchievements();
+  toast('🎬 「'+title+'」开始制作，'+t.productionMonths+'个月后正式发布！','success');
+}
+
+function renderActiveReleases(){
+  const el=document.getElementById('active-releases');
+  const badge=document.getElementById('release-count-badge');
+  const pending=G.pendingReleases||[];
+  const active=G.releases||[];
+  if(!active.length&&!pending.length){
+    el.innerHTML='<div style="font-size:13px;color:#999">还没有发行任何内容</div>';
+    if(badge) badge.textContent='';
+    return;
+  }
+  let html='';
+  if(pending.length){
+    html+=pending.map((r,i)=>{
+      const typeIcon=CONTENT_TYPES.find(t=>t.id===r.type)?.icon||'🎵';
+      const left=r.goLiveAt-G.month;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i<pending.length-1||active.length?'border-bottom:1px solid #f0ede6':''}">
+        <div style="width:42px;height:42px;border-radius:10px;background:#f0e6ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;opacity:.6">${typeIcon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#666">${r.title}</div>
+          <div style="font-size:11px;color:#7c3aed;font-weight:500;margin-top:3px">🔨 制作中 · 还需 ${left} 个月上线</div>
+        </div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:600;flex-shrink:0">制作中</div>
+      </div>`;
+    }).join('');
+  }
+  if(!active.length){el.innerHTML=html;if(badge)badge.textContent=pending.length+'部制作中';return;}
+  const sorted=[...active].sort((a,b)=>b.releasedAt-a.releasedAt);
+  if(badge) badge.textContent=(pending.length?pending.length+'部制作中 · ':'')+sorted.length+'部上线';
+  el.innerHTML=html+sorted.map((r,i)=>{
+    const age=G.month-r.releasedAt;
+    const isActive=r.type==='doc'?age<r.duration:true;
+    const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+    const streamBonus=G.streamingDeal&&(r.type==='single'||r.type==='album')?1.5:1;
+    const thisMonthIncome=Math.round(r.baseIncome*mult*streamBonus);
+    const heatPct=r.type==='doc'?Math.max(0,Math.round((1-age/r.duration)*100)):Math.max(5,Math.round((1-age/4)*100));
+    const heatColor=heatPct>60?'#16a34a':heatPct>30?'#e65100':'#dc2626';
+    const typeIcon=CONTENT_TYPES.find(t=>t.id===r.type)?.icon||'🎵';
+    const phaseLabel=age===0?'🔥 新鲜发布':age<=1?'📈 上升期':age<=2?'➡️ 平稳期':age<=3?'📉 长尾期':'💤 长尾';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;${i<sorted.length-1?'border-bottom:1px solid #f0ede6':''}">
+      <div style="width:42px;height:42px;border-radius:10px;background:#f0e6ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${typeIcon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.title}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+          <span style="font-size:10px;color:#999">第${age+1}个月</span>
+          <span style="font-size:10px;padding:1px 6px;border-radius:99px;background:#f0ede6;color:#666">${phaseLabel}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
+          <div style="flex:1;height:4px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:100px">
+            <div style="height:100%;border-radius:99px;background:${heatColor};width:${heatPct}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:10px;color:${heatColor};font-weight:600">热度 ${heatPct}%</span>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:14px;font-weight:700;color:${isActive?'#2e7d32':'#999'}">${r.type==='doc'?(isActive?'+'+Math.max(1,Math.round(mult*4))+'知名度':'已完结'):(isActive?'+'+thisMonthIncome+'万/月':'长尾 +'+thisMonthIncome+'万')}</div>
+        <div style="font-size:10px;color:#999;margin-top:1px">${streamBonus>1?'📱平台加成×1.5':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStreamingInfo(){
+  const el=document.getElementById('streaming-info');
+  const canSign=G.buildings.studio.lv>=2&&G.fame>=40;
+  if(G.streamingDeal){
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:4px 0">
+      <div style="font-size:28px">📱</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:#2e7d32">✅ 已签约流媒体平台</div>
+        <div style="font-size:12px;color:#666;margin-top:3px">单曲 / 专辑发行收益 ×1.5，长期有效</div>
+      </div>
+    </div>`;
+  } else {
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:12px;padding:4px 0">
+      <div style="font-size:28px;opacity:${canSign?1:.4}">📱</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">流媒体平台合约</div>
+        <div style="font-size:12px;color:#666;margin-top:3px">签约后单曲/专辑收益永久 ×1.5 · 费用 50万</div>
+        <div style="font-size:11px;color:#999;margin-top:2px">解锁条件：录音室 Lv.2 且知名度 ≥ 40</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="signStreaming()" ${canSign?'':'disabled'}>签约 50万</button>
+    </div>`;
+  }
+}
+
+function signStreaming(){
+  if(G.buildings.studio.lv<2){toast('需要录音室 Lv.2+','error');return;}
+  if(G.fame<40){toast('需要知名度 ≥ 40','error');return;}
+  if(G.money<50){toast('资金不足 50万','error');return;}
+  G.money-=50;
+  G.streamingDeal=true;
+  addLog('签约流媒体平台','minus',50);
+  saveGame();renderContent();updateStats();checkAchievements();
+  toast('📱 流媒体合约签署成功！单曲/专辑收益永久×1.5','success');
+}
+
+let contentArtistIdx=0, contentTypeId='single', contentCustomTitle='';
+
+function checkAchievements(){
+  let newUnlocks=[];
+  ACHIEVEMENTS.forEach(ach=>{
+    if(!(G.achievements||[]).includes(ach.id)&&ach.check()){
+      G.achievements.push(ach.id);
+      newUnlocks.push(ach);
+    }
+  });
+  if(newUnlocks.length){
+    saveGame();
+    if(document.getElementById('section-achievements').classList.contains('active')) renderAchievements();
+    newUnlocks.forEach((ach,i)=>{
+      setTimeout(()=>showAchToast(ach),i*1200);
+      pushFeed('🏆','解锁成就：'+ach.icon+' '+ach.name,'special');
+    });
+  }
+}
+
+function showAchToast(ach){
+  const el=document.getElementById('ach-toast');
+  el.innerHTML=`<div style="font-size:10px;opacity:.7;margin-bottom:3px;letter-spacing:.5px">🏆 成就解锁</div><div style="font-size:15px">${ach.icon} ${ach.name}</div><div style="font-size:11px;opacity:.7;margin-top:3px">${ach.desc}</div>`;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+function renderAchievements(){
+  const cats=['里程碑','艺人','建设','内容','活动'];
+  const unlocked=G.achievements||[];
+  const total=ACHIEVEMENTS.length;
+  document.getElementById('ach-progress').innerHTML=
+    `已解锁 <strong style="color:#1a1a1a">${unlocked.length}</strong> / ${total} &nbsp;·&nbsp; `+
+    `<span style="font-size:12px">${Math.round(unlocked.length/total*100)}% 完成度</span>`;
+  document.getElementById('ach-list').innerHTML=cats.map(cat=>{
+    const list=ACHIEVEMENTS.filter(a=>a.cat===cat);
+    return `<div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">${cat}</div>
+      <div class="ach-grid">
+        ${list.map(ach=>{
+          const done=unlocked.includes(ach.id);
+          return `<div class="ach-card ${done?'unlocked':'locked'}">
+            <div class="ach-icon">${ach.icon}</div>
+            <div class="ach-name">${ach.name}</div>
+            <div class="ach-desc">${ach.desc}</div>
+            ${done?'<div style="font-size:10px;color:#92400e;font-weight:600;margin-top:2px">✅ 已解锁</div>':''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sceneAchievements(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+// ── 市场动态 ───────────────────────────────────────────
+function hasTrend(id){ return (G.activeTrends||[]).some(t=>t.id===id); }
+
+function updateTrends(){
+  G.activeTrends=(G.activeTrends||[]).map(t=>({...t,remaining:t.remaining-1})).filter(t=>t.remaining>0);
+  if(G.activeTrends.length<3&&Math.random()<0.35){
+    const used=new Set(G.activeTrends.map(t=>t.id));
+    const pool=TREND_POOL.filter(t=>!used.has(t.id));
+    if(pool.length){
+      const tr=pool[Math.floor(Math.random()*pool.length)];
+      G.activeTrends.push({...tr,remaining:tr.duration});
+    }
+  }
+}
+
+function renderMarket(){
+  const badge=document.getElementById('trend-count-badge');
+  const list=document.getElementById('trend-list');
+  const tip=document.getElementById('market-tip');
+  if(!G.activeTrends||!G.activeTrends.length){
+    badge.textContent='暂无活跃趋势';
+    list.innerHTML='<div style="font-size:13px;color:#999;padding:8px 0">当前市场平稳，等待下一月触发新趋势</div>';
+  } else {
+    badge.textContent=G.activeTrends.length+' 条活跃';
+    list.innerHTML=G.activeTrends.map(t=>`
+      <div class="trend-card" style="border-color:${t.bad?'#fca5a5':'#a7f3d0'}">
+        <div class="trend-icon" style="background:${t.bad?'#fee2e2':'#dcfce7'}">${t.icon}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <span style="font-size:14px;font-weight:600">${t.name}</span>
+            <span style="font-size:10px;padding:1px 7px;border-radius:99px;background:${t.bad?'#fee2e2':'#dcfce7'};color:${t.bad?'#dc2626':'#16a34a'}">${t.cat}</span>
+            <span style="font-size:10px;color:#999">剩余 ${t.remaining} 月</span>
+          </div>
+          <div style="font-size:12px;color:#666">${t.desc}</div>
+        </div>
+      </div>`).join('');
+  }
+  const hasBad=G.activeTrends&&G.activeTrends.some(t=>t.bad);
+  tip.innerHTML=hasBad?'⚠️ 市场存在负面趋势，请注意防范影响！':'💡 当前市场趋势对公司有利，把握机会扩大收益！';
+  tip.style.background=hasBad?'#fff1f2':'#fff8e1';
+  tip.style.borderColor=hasBad?'#fca5a5':'#ffe082';
+  tip.style.color=hasBad?'#dc2626':'#5d4037';
+}
+
+function sceneMarket(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+// ── 经纪人 ─────────────────────────────────────────────
+function hasAgent(id){ return (G.agents||[]).includes(id); }
+function agentData(id){ return AGENT_POOL.find(a=>a.id===id); }
+
+function hireAgent(id){
+  const ag=agentData(id);
+  if(!ag) return;
+  const hireCost=ag.salary*6;
+  if(G.money<hireCost){toast('资金不足 '+hireCost+' 万（6个月预付）','error');return;}
+  if(hasAgent(id)){toast('该经纪人已在职','error');return;}
+  G.money-=hireCost;
+  (G.agents=G.agents||[]).push(id);
+  addLog('签约'+ag.name,'minus',hireCost);
+  saveGame();renderAgents();updateStats();
+  toast('🤝 '+ag.name+' 加入团队！','success');
+}
+
+function fireAgent(id){
+  const ag=agentData(id);
+  if(!ag||!hasAgent(id)) return;
+  G.agents=(G.agents||[]).filter(x=>x!==id);
+  saveGame();renderAgents();updateStats();
+  toast(ag.name+' 已离职','success');
+}
+
+function renderAgents(){
+  const grid=document.getElementById('agent-grid');
+  const salaryInfo=document.getElementById('agent-salary-info');
+  const tip=document.getElementById('agents-tip');
+  const totalSalary=(G.agents||[]).reduce((s,id)=>{const ag=agentData(id);return s+(ag?ag.salary:0);},0);
+  salaryInfo.textContent=totalSalary+' 万/月';
+  salaryInfo.style.color=totalSalary>0?'#c62828':'#999';
+  tip.textContent='招募专业经纪人提升各方面效率，每位经纪人每月收取薪资（首次需预付6个月）。当前在职：'+(G.agents||[]).length+'名';
+  grid.innerHTML=AGENT_POOL.map(ag=>{
+    const hired=hasAgent(ag.id);
+    const hireCost=ag.salary*6;
+    return `<div class="agent-card ${hired?'hired':''}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:40px;height:40px;border-radius:12px;background:${hired?'#dcfce7':'#f5f4f0'};display:flex;align-items:center;justify-content:center;font-size:20px">${ag.icon}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600">${ag.name}</div>
+          <div style="font-size:11px;color:#999">${ag.cat} · ${ag.salary}万/月</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#666;line-height:1.6;flex:1">${ag.desc}</div>
+      ${hired
+        ?`<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#16a34a;font-weight:600">✅ 在职</span><button class="btn btn-sm" onclick="fireAgent('${ag.id}')">辞退</button></div>`
+        :`<button class="btn btn-sm btn-primary" onclick="hireAgent('${ag.id}')">签约 ${hireCost}万</button>`
+      }
+    </div>`;
+  }).join('');
+}
+
+function sceneAgents(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+// ── 竞争对手 ───────────────────────────────────────────
+const RIVAL_TEMPLATES=[
+  {name:'星辰娱乐',icon:'⭐',color:'#eff6ff'},
+  {name:'极光传媒',icon:'🌊',color:'#f0fdf4'},
+  {name:'幻影文化',icon:'🎭',color:'#fdf4ff'},
+];
+
+function initRivals(){
+  if(G.rivals&&G.rivals.length) return;
+  G.rivals=RIVAL_TEMPLATES.slice(0,2).map(r=>({
+    ...r,
+    fame:Math.max(20,Math.round(G.fame*0.8+15)),
+    lastAction:'',
+  }));
+}
+
+function doRivalAction(){
+  if(!G.rivals||!G.rivals.length) return;
+  G.rivals.forEach(r=>{
+    r.fame=Math.round(r.fame*1.04+3);
+    const roll=Math.random();
+    if(roll<0.3&&G.artists.some(a=>(a.fans||0)>3)){
+      const pool=G.artists.filter(a=>(a.fans||0)>3);
+      const a=pool[Math.floor(Math.random()*pool.length)];
+      const loss=Math.max(1,Math.round((a.fans||0)*0.07));
+      a.fans=Math.max(0,(a.fans||0)-loss);
+      r.lastAction='抢夺资源：'+displayName(a)+' 流失 '+loss+' 万粉丝';
+    } else if(roll<0.5&&G.fame>20){
+      const fLoss=Math.max(3,Math.round(G.fame*0.04));
+      G.fame=Math.max(0,G.fame-fLoss);
+      r.lastAction='散布负面消息，公司知名度 -'+fLoss;
+    } else {
+      r.lastAction='保持低调，专注内部发展';
+    }
+    if(r.lastAction) G.lastEvents.push({name:r.name+' 动态',desc:r.lastAction,icon:r.icon,type:'bad'});
+  });
+}
+
+function doRivalCounter(i,action){
+  const r=G.rivals[i];
+  if(!r) return;
+  if(action==='suppress'){
+    if(G.money<50){toast('资金不足 50万','error');return;}
+    G.money-=50;
+    r.fame=Math.max(0,Math.round(r.fame*0.85));
+    addLog('压制'+r.name,'minus',50);
+    toast('💪 成功压制 '+r.name+'，对方知名度-15%','success');
+  } else if(action==='collab'){
+    if(G.money<30){toast('资金不足 30万','error');return;}
+    G.money-=30;G.fame+=15;
+    addLog('与'+r.name+'合作','minus',30);
+    toast('🤝 与 '+r.name+' 达成合作，知名度+15','success');
+  }
+  saveGame();renderRivals();updateStats();
+}
+
+function renderRivals(){
+  const el=document.getElementById('rivals-list');
+  const tip=document.getElementById('rivals-tip');
+  if(!G.rivals||!G.rivals.length){
+    el.innerHTML='<div style="font-size:13px;color:#999;padding:20px 0;text-align:center">暂无竞争对手，推进游戏后自动出现</div>';
+    return;
+  }
+  const maxThreat=G.rivals.some(r=>r.fame>G.fame);
+  tip.innerHTML=maxThreat?'⚠️ 注意！有对手知名度已超越你，需要加快发展！':'💪 目前你的公司在竞争中占据优势，继续保持！';
+  tip.style.background=maxThreat?'#fff1f2':'#fff8e1';
+  tip.style.borderColor=maxThreat?'#fca5a5':'#ffe082';
+  tip.style.color=maxThreat?'#dc2626':'#5d4037';
+  el.innerHTML=G.rivals.map((r,i)=>`
+    <div class="rival-card" style="border-color:${r.fame>G.fame?'#fca5a5':'#e8e5de'}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="width:42px;height:42px;border-radius:12px;background:${r.color};display:flex;align-items:center;justify-content:center;font-size:20px">${r.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:600">${r.name}</div>
+          <div style="font-size:12px;color:#666;margin-top:2px">知名度 <strong style="color:${r.fame>G.fame?'#dc2626':'#16a34a'}">${r.fame}</strong>（我方：${G.fame}）</div>
+        </div>
+        <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:${r.fame>G.fame?'#fee2e2':'#dcfce7'};color:${r.fame>G.fame?'#dc2626':'#16a34a'};font-weight:600">${r.fame>G.fame?'⚠️ 威胁':'✅ 弱势'}</span>
+      </div>
+      ${r.lastAction?`<div style="font-size:12px;color:#666;background:#f5f4f0;padding:8px 10px;border-radius:8px;margin-bottom:10px">上次动态：${r.lastAction}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="doRivalCounter(${i},'suppress')">💰 压制 50万</button>
+        <button class="btn btn-sm btn-success" onclick="doRivalCounter(${i},'collab')">🤝 合作 30万</button>
+      </div>
+    </div>`).join('');
+}
+
+function sceneRivals(){
+  return `<div style="position:absolute;inset:0;background:linear-gradient(180deg,#faf9f7 0%,#f5f4f0 100%)"></div>`;
+}
+
+// ── 合同管理 ───────────────────────────────────────────
+function contractAttitude(a){
+  const fans=a.fans||0,pr=a.pr||60;
+  const remaining=(a.contractEnd||G.month+24)-G.month;
+  const overdue=remaining<0?-remaining:0;
+  if(fans>=500)
+    return{label:'天王天后',icon:'👑',desc:'顶级流量，最多接受2年合约，溢价幅度极高',costMult:1.8,maxYears:2,bg:'#fef9c3',tc:'#92400e'};
+  if(fans>=100||pr>=80)
+    return{label:'傲娇强硬',icon:'😤',desc:'人气旺盛，拒绝签3年以上长约，要求溢价续签',costMult:1.35,maxYears:3,bg:'#fef3c7',tc:'#b45309'};
+  if(overdue>0){
+    const mult=Math.min(2.5,1+overdue*0.15);
+    return{label:'心生去意',icon:'😔',desc:'合同已逾期'+overdue+'个月，续签费每月上涨15%，请尽快处理',costMult:mult,maxYears:5,bg:'#ffebee',tc:'#c62828'};
+  }
+  if(pr<=40||(a.energy??80)<=20&&a.status!=='休息中')
+    return{label:'感激支持',icon:'🥺',desc:pr<=40?'正处于口碑危机，感谢公司不离不弃，接受优惠条款':'精力透支，感激公司照顾，愿意让步',costMult:0.8,maxYears:5,bg:'#f0fdf4',tc:'#16a34a'};
+  return{label:'接受标准',icon:'😊',desc:'状态稳定，接受公司标准续签条款',costMult:1.0,maxYears:5,bg:'#f5f4f0',tc:'#555'};
+}
+
+function calcRenewCost(a,months,offerPct=100){
+  const legalDisc=(G.buildings.legal?.lv||0)*0.1;
+  const base=Math.round((30+(a.fans||0)*0.5)*(1-legalDisc));
+  const durMult={12:0.7,24:1.0,36:1.25,48:1.5,60:1.75}[months]||1.0;
+  const att=contractAttitude(a);
+  const suggested=Math.round(base*durMult*att.costMult);
+  const offerMult=Math.max(0.8,Math.min(2,offerPct/100));
+  const cost=Math.max(1,Math.round(suggested*offerMult));
+  const baseRisk=renewRejectRate(a);
+  const offerBonus=Math.round((offerMult-1)*60);
+  const risk=Math.max(0,Math.min(95,baseRisk-offerBonus));
+  return{cost,suggested,base,durMult,attMult:att.costMult,offerPct:Math.round(offerMult*100),offerMult,baseRisk,risk,success:100-risk};
+}
+
+function renderContracts(){
+  const el=document.getElementById('contract-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>{
+    if(a.wantLeave){
+      const daysLeft=(a.leaveDeadline||0)-G.month;
+      return `<div class="contract-row" style="border:1.5px solid #fca5a5;background:#fff5f5;border-radius:10px">
+        <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+          <div style="font-size:11px;margin-top:2px;color:#dc2626">💔 拒绝续签，${daysLeft>0?daysLeft+'个月后':'即将'}离开公司</div>
+          <div style="font-size:10px;margin-top:2px;color:#ef4444;opacity:.75">可花费1.5倍费用紧急挽留</div>
+        </div>
+        <button class="btn btn-sm" onclick="retainArtist(${i})" style="background:#dc2626;color:#fff;border-color:#dc2626;white-space:nowrap">💔 挽留</button>
+      </div>`;
+    }
+    const remaining=(a.contractEnd||G.month+24)-G.month;
+    const isExpired=remaining<=0;
+    const isExpiring=remaining>0&&remaining<=6;
+    const canRenew=remaining<=6;
+    const att=contractAttitude(a);
+    return `<div class="contract-row">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+        <div style="font-size:11px;margin-top:2px;color:${isExpired?'#dc2626':isExpiring?'#e65100':'#2e7d32'}">
+          ${isExpired?'⚠️ 合同已到期！':isExpiring?'⏰ 剩余 '+remaining+' 个月':'✅ 剩余 '+remaining+' 个月'}
+        </div>
+        ${canRenew?`<div style="font-size:10px;margin-top:3px;display:inline-block;background:${att.bg};color:${att.tc};padding:1px 7px;border-radius:99px;font-weight:600">${att.icon} ${att.label}</div>`:''}
+      </div>
+      <button class="btn btn-sm ${canRenew?'btn-primary':''}" onclick="${canRenew?'openRenewModal('+i+')':''}" ${canRenew?'':'disabled'}>
+        ${canRenew?'进入谈判':'未到期'}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+let renewIdx=-1,renewMonths=24,renewOfferPct=100;
+
+function openRenewModal(i){
+  renewIdx=i;renewMonths=24;renewOfferPct=100;
+  renderRenewModal();
+  document.getElementById('modal-renew-contract').classList.add('open');
+}
+
+function renderRenewModal(){
+  const a=G.artists[renewIdx];
+  const remaining=(a.contractEnd||G.month+24)-G.month;
+  const att=contractAttitude(a);
+  const {cost,suggested,base,durMult,attMult,offerPct,success,risk}=calcRenewCost(a,renewMonths,renewOfferPct);
+  const affordable=G.money>=cost;
+  const durations=[{m:12,label:'1年',suffix:'-30%'},{m:24,label:'2年',suffix:'标准'},{m:36,label:'3年',suffix:'+25%'},{m:48,label:'4年',suffix:'+50%'},{m:60,label:'5年',suffix:'+75%'}];
+  const riskDesc=risk>=50?'高风险：艺人很可能拒绝续签并提出解约':risk>=30?'中等风险：艺人有顾虑，建议改善条件再谈':risk>0?'低风险：轻微顾虑，谈判有望成功':'';
+  const riskHtml=risk>0?'<div style="background:#fff0f0;border-radius:10px;padding:10px 14px;margin-bottom:16px;border-left:3px solid #f87171"><div style="font-size:12px;font-weight:700;color:#dc2626">⚠️ 拒绝风险：'+risk+'%</div><div style="font-size:10px;color:#ef4444;margin-top:3px;opacity:.85">'+riskDesc+'</div></div>':'';
+  document.getElementById('renew-contract-content').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0">续签谈判</div>
+      <button class="btn btn-sm" onclick="closeRenewModal()">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div class="avatar" style="background:${a.color};color:${a.tc};width:44px;height:44px;font-size:16px;flex-shrink:0">${a.abbr}</div>
+      <div>
+        <div style="font-size:15px;font-weight:700">${displayName(a)}</div>
+        <div style="font-size:11px;color:${remaining<=0?'#dc2626':remaining<=6?'#e65100':'#999'};margin-top:2px">
+          ${remaining<=0?'合同已到期 '+(-remaining)+'个月':'合同剩余 '+remaining+' 个月'}
+        </div>
+      </div>
+    </div>
+    <div style="background:${att.bg};border-radius:10px;padding:12px 14px;margin-bottom:12px;border-left:3px solid ${att.tc}">
+      <div style="font-size:13px;font-weight:700;color:${att.tc}">${att.icon} 艺人态度：${att.label}</div>
+      <div style="font-size:11px;color:${att.tc};opacity:.85;margin-top:4px;line-height:1.6">${att.desc}</div>
+    </div>
+    ${riskHtml}
+    <div style="font-size:11px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:8px">选择续签时长</div>
+    <div style="display:flex;gap:5px;margin-bottom:16px">
+      ${durations.map(({m,label,suffix})=>{
+        const allowed=m/12<=att.maxYears;
+        const sel=renewMonths===m;
+        return `<button class="btn btn-sm ${sel?'btn-primary':''}" onclick="${allowed?'selectRenewDuration('+m+')':''}" ${allowed?'':'disabled'} title="${allowed?'':att.label+'：拒绝此合约时长'}" style="flex:1;flex-direction:column;gap:1px;padding:6px 2px${!allowed?';opacity:.3':''}">
+          <span style="font-size:12px;font-weight:600">${label}</span>
+          <span style="font-size:9px;${suffix==='标准'?'opacity:.6':suffix[0]==='-'?'color:#16a34a':'color:#e65100'}">${suffix}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:8px">选择报价</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+      ${[90,100,120,140,160,180].map(p=>`
+        <button class="btn btn-sm ${renewOfferPct===p?'btn-primary':''}" onclick="selectRenewOffer(${p})" style="padding:6px 2px;flex-direction:column;gap:1px">
+          <span style="font-size:12px;font-weight:600">${p}%</span>
+          <span style="font-size:9px;${p<100?'color:#16a34a':p===100?'opacity:.6':'color:#e65100'}">${p<100?'省钱':p===100?'标准':p<140?'加价':p<160?'诚意':'重金'}</span>
+        </button>`).join('')}
+    </div>
+    <div style="background:#f8f9fa;border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:11px;color:#bbb;margin-bottom:4px">预计续签费用</div>
+      <div style="font-size:22px;font-weight:800;color:${affordable?'#1a1a1a':'#dc2626'}">${cost} 万</div>
+      <div style="font-size:10px;color:#ccc;margin-top:3px">标准${suggested}万 · 基础${base}万 × ${durMult}（时长）× ${attMult.toFixed(2)}（态度）</div>
+      <div style="font-size:10px;color:#999;margin-top:4px">当前报价 ${offerPct}% · 成功率 ${success}%</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="closeRenewModal()" style="flex:1;justify-content:center">取消</button>
+      <button class="btn ${affordable?'btn-primary':''}" onclick="${affordable?'confirmRenew()':''}" ${affordable?'':'disabled'} style="flex:2;justify-content:center">
+        ${affordable?'💼 确认续签 · '+cost+'万':'资金不足 · '+cost+'万'}
+      </button>
+    </div>`;
+}
+
+function selectRenewDuration(m){renewMonths=m;renderRenewModal();}
+function selectRenewOffer(p){renewOfferPct=p;renderRenewModal();}
+
+function confirmRenew(){
+  const a=G.artists[renewIdx];
+  const{cost,risk}=calcRenewCost(a,renewMonths,renewOfferPct);
+  if(G.money<cost){toast('资金不足 '+cost+' 万','error');return;}
+  if(risk>0&&Math.floor(Math.random()*100)<risk){
+    closeRenewModal();
+    a.wantLeave=true;
+    a.leaveDeadline=G.month+2;
+    saveGame();renderContracts();updateSidebar();
+    pushFeed('💔',displayName(a)+' 拒绝续签！将在2个月内离开','bad');
+    toast('💔 '+displayName(a)+' 拒绝了续签！将在2个月后离开，可花费1.5倍费用紧急挽留','error');
+    return;
+  }
+  G.money-=cost;
+  a.contractEnd=Math.max(G.month,(a.contractEnd||G.month))+renewMonths;
+  a.wantLeave=false;
+  a.leaveDeadline=0;
+  addLog(displayName(a)+' 合同续签 '+(renewMonths/12)+'年','minus',cost);
+  saveGame();renderContracts();updateStats();updateSidebar();
+  pushFeed('📋','续签 '+displayName(a)+' '+(renewMonths/12)+'年，花费'+cost+'万','good');
+  closeRenewModal();
+  toast('✅ '+displayName(a)+' 续签成功，再续'+(renewMonths/12)+'年！','success');
+}
+
+function closeRenewModal(){
+  document.getElementById('modal-renew-contract').classList.remove('open');
+  renewIdx=-1;
+}
+
+function retainArtist(i){
+  const a=G.artists[i];
+  if(!a||!a.wantLeave) return;
+  const{cost}=calcRenewCost(a,24,100);
+  const retainCost=Math.round(cost*1.5);
+  if(G.money<retainCost){toast('资金不足 '+retainCost+' 万（挽留费用）','error');return;}
+  if(!confirm('花费 '+retainCost+' 万 挽留 '+displayName(a)+'？\n（费用为正常续签的1.5倍，必定成功，续签24个月）')) return;
+  G.money-=retainCost;
+  a.contractEnd=G.month+24;
+  a.wantLeave=false;
+  a.leaveDeadline=0;
+  addLog('紧急挽留 '+displayName(a),'minus',retainCost);
+  saveGame();renderContracts();updateStats();updateSidebar();
+  pushFeed('🤝','成功挽留 '+displayName(a)+'，续签24个月','good');
+  toast('🤝 成功挽留 '+displayName(a)+'！','success');
+}
+
+// ── 粉丝运营 ───────────────────────────────────────────
+function renderFanOps(){
+  const el=document.getElementById('fanops-list');
+  const tip=document.getElementById('fanops-tip');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  const bonus=hasTrend('social_viral');
+  tip.innerHTML=bonus?'📣 社交媒体热潮中！所有粉丝运营效果 ×1.5，这个月大力推广吧！':'💝 粉丝运营每月每位艺人限操作一次，提升粉丝量与好感度';
+  el.innerHTML=G.artists.map((a,i)=>{
+    const used=a.lastFanOp>=G.month;
+    const ok=a.status==='已出道'||a.status==='工作中';
+    return `<div class="artist-row" style="align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:110px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${displayName(a)} <span class="status-badge ${statusCls(a.status)}">${a.status}</span></div>
+        <div style="font-size:11px;color:#999">${a.fans||0}万粉丝 · 口碑${a.pr||60}</div>
+        ${used?'<div style="font-size:11px;color:#999;margin-top:2px">✅ 本月已操作</div>':''}
+        ${!ok?'<div style="font-size:11px;color:#e65100;margin-top:2px">需出道后才可操作</div>':''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+        <button class="btn btn-sm" onclick="doFanAction(${i},'social')" ${used||!ok?'disabled':''}>📱 社媒推广 免费</button>
+        <button class="btn btn-sm" onclick="doFanAction(${i},'fanclub')" ${used||!ok?'disabled':''}>🎪 粉丝应援 10万</button>
+        <button class="btn btn-sm btn-primary" onclick="doFanAction(${i},'offline')" ${used||!ok?'disabled':''}>🎤 线下见面 30万</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function doFanAction(i,action){
+  const a=G.artists[i];
+  if(a.lastFanOp>=G.month){toast('本月已操作过了','error');return;}
+  if(a.status!=='已出道'&&a.status!=='工作中'){toast('只有出道艺人才能进行粉丝运营','error');return;}
+  const mult=hasTrend('social_viral')?1.5:1;
+  let fanGain=0,prGain=0;
+  if(action==='social'){
+    fanGain=Math.round((3+Math.random()*5)*mult);
+    prGain=3;
+  } else if(action==='fanclub'){
+    if(G.money<10){toast('资金不足 10万','error');return;}
+    G.money-=10; addLog(displayName(a)+' 粉丝应援','minus',10);
+    fanGain=Math.round((8+Math.random()*10)*mult);
+    prGain=8;
+  } else if(action==='offline'){
+    if(G.money<30){toast('资金不足 30万','error');return;}
+    G.money-=30; addLog(displayName(a)+' 线下见面会','minus',30);
+    fanGain=Math.round((20+Math.random()*20+(a.fans||0)*0.05)*mult);
+    prGain=15;
+  }
+  a.fans=Math.round((a.fans||0)+fanGain);
+  a.pr=Math.min(100,(a.pr||60)+prGain);
+  a.lastFanOp=G.month;
+  saveGame();renderFanOps();renderArtistList();updateStats();
+  toast('💝 '+displayName(a)+' 粉丝 +'+fanGain+'万，口碑 +'+prGain,'success');
+}
+
+function init(){
+  const hasSave=loadGame();
+  if(!G.usedEvents) G.usedEvents=[];
+  if(!G.usedEventArtists||Array.isArray(G.usedEventArtists)) G.usedEventArtists={};
+  if(!G.lastEvents) G.lastEvents=[];
+  if(!G.feed) G.feed=[];
+  if(!G.achievements) G.achievements=[];
+  if(!G.completedEventNames) G.completedEventNames=[];
+  G.artists.forEach(a=>{if(a._hadCrisis===undefined) a._hadCrisis=false;});
+  if(!G.monthlyHistory) G.monthlyHistory=[];
+  if(!G.releases) G.releases=[];
+  if(G.streamingDeal===undefined) G.streamingDeal=false;
+  if(!G.activeTrends) G.activeTrends=[];
+  if(!G.agents) G.agents=[];
+  if(!G.rivals) G.rivals=[];
+  if(!G.pendingEvents) G.pendingEvents=[];
+  if(!G.pendingReleases) G.pendingReleases=[];
+  if(!G.buildingActions) G.buildingActions={};
+  if(!G.unlockedTabs) G.unlockedTabs=[];
+  if(!G.scoutedPool) G.scoutedPool=[];
+  pruneScoutedPool();
+  G.artists.forEach(a=>{
+    normalizeArtistFinance(a);
+    if(a.pr===undefined) a.pr=60;
+    if(!a.contractEnd) a.contractEnd=G.month+24;
+    if(!a.lastFanOp) a.lastFanOp=0;
+    if(a.releaseBusyUntil&&a.releaseBusyUntil<=G.month) delete a.releaseBusyUntil;
+  });
+  if(!G.rivals.length) initRivals();
+  renderBuildings();renderBusiness();renderEvents();updateOverview();updateStats();updateSidebar();
+  if(G.artists.length) renderArtistList();
+  renderScene('overview');
+  startDayTick();
+  if(hasSave){checkAchievements();toast('读取存档成功，继续上次游戏','success');}
+  else checkAchievements();
+  renderFeed();
+  _initDone=true;
+}
+
+function showSection(id){
+  const lockEntry=TAB_UNLOCK.find(t=>t.id===id);
+  if(lockEntry&&!lockEntry.check()){toast('🔒 尚未解锁 · '+lockEntry.hint,'error');return;}
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('section-'+id).classList.add('active');
+  document.getElementById('nav-'+id).classList.add('active');
+  renderScene(id);
+  if(id==='finance') renderFinance();
+  if(id==='content') renderContent();
+  if(id==='business') renderBusiness();
+  if(id==='achievements') renderAchievements();
+  if(id==='market') renderMarket();
+  if(id==='agents') renderAgents();
+  if(id==='rivals') renderRivals();
+}
+
+function switchTab(tab,el){
+  artistTabCur=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-roster').style.display=tab==='roster'?'':'none';
+  document.getElementById('tab-train').style.display=tab==='train'?'':'none';
+  document.getElementById('tab-pr').style.display=tab==='pr'?'':'none';
+  document.getElementById('tab-contracts').style.display=tab==='contracts'?'':'none';
+  document.getElementById('tab-fanops').style.display=tab==='fanops'?'':'none';
+  if(tab==='train') renderTrainList();
+  if(tab==='pr') renderPrTab();
+  if(tab==='contracts') renderContracts();
+  if(tab==='fanops') renderFanOps();
+}
+
+function renderArtistList(){
+  const el=document.getElementById('artist-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px;padding:8px 0">暂无艺人，点击「招募练习生」开始！</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>`
+    <div class="artist-row">
+      <div class="avatar" style="background:${a.color};color:${a.tc}">${a.abbr}</div>
+      <div class="artist-info">
+        <div class="artist-name" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span>${displayName(a)}</span>
+          ${a.alias?`<span style="font-size:10px;color:#bbb;font-weight:400">${a.name}</span>`:''}
+          <button class="alias-edit-btn" onclick="openAliasEdit(${i})">✏️</button>
+        </div>
+        <div class="artist-tags">
+          ${a.singing>60?'<span class="tag singing">唱</span>':''}
+          ${a.dance>60?'<span class="tag dance">舞</span>':''}
+          ${a.acting>60?'<span class="tag acting">演</span>':''}
+          ${a.rap>60?'<span class="tag rap">说唱</span>':''}
+          ${(a.status!=='休息中'&&(a.energy??80)<=30)?'<span class="tag" style="background:#fee2e2;color:#c62828">需休息</span>':''}
+          <span class="status-badge ${statusCls(a.status)}">${a.status}</span>
+          ${a.direction?`<span class="direction-badge dir-${dirClass(a.direction)}">${dirIcon(a.direction)} ${a.direction}</span>`:''}
+          ${a.status==='已出道'?`<button class="btn btn-sm" style="font-size:10px;padding:2px 7px;height:auto;line-height:1.6" onclick="openDirectionSelect(${i})">${a.direction?'换方向':'选方向'}</button>`:''}
+          <span class="tag" style="background:${prBg(a.pr||60)};color:${prColor(a.pr||60)}">口碑 ${a.pr||60}</span>
+          <span class="tag" style="background:#eef2ff;color:#3730a3">公司分成 ${getCompanyShare(a)}%</span>
+        </div>
+      </div>
+      <div style="flex:1;max-width:130px">
+        <div class="bar-wrap"><span style="font-size:10px;color:#999;width:14px">唱</span><div class="bar-bg"><div class="bar-fill bar-blue" style="width:${a.singing}%"></div></div><span class="bar-val">${a.singing}</span></div>
+        <div class="bar-wrap" style="margin-top:3px"><span style="font-size:10px;color:#999;width:14px">舞</span><div class="bar-bg"><div class="bar-fill bar-amber" style="width:${a.dance}%"></div></div><span class="bar-val">${a.dance}</span></div>
+        <div class="bar-wrap" style="margin-top:3px"><span style="font-size:10px;color:#999;width:14px">演</span><div class="bar-bg"><div class="bar-fill bar-green" style="width:${a.acting}%"></div></div><span class="bar-val">${a.acting}</span></div>
+        <div class="bar-wrap" style="margin-top:3px"><span style="font-size:10px;color:#999;width:14px">说</span><div class="bar-bg"><div class="bar-fill bar-pink" style="width:${a.rap}%"></div></div><span class="bar-val">${a.rap}</span></div>
+      </div>
+      <div style="font-size:11px;color:#999;white-space:nowrap">${a.fans||0}万粉</div>
+    </div>
+  `).join('');
+}
+
+function renderTrainList(){
+  const el=document.getElementById('train-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  const eff=(1+(G.buildings.practice.lv*0.2))*(hasTrend('training_boost')?1.4:1)*(hasAgent('trainer')?1.4:1);
+  el.innerHTML=G.artists.map((a,i)=>{
+    const energy=a.energy===undefined?80:a.energy;
+    const eColor=energy>60?'#16a34a':energy>20?'#d97706':'#dc2626';
+    const eLabel=energy>60?'充沛':energy>20?'疲惫':'耗尽';
+    const pr=a.pr||60;
+    const prMult=pr>=80?1.3:pr>=60?1.0:pr>=40?0.7:0.3;
+    const mvBonus=G.buildings.mv.lv>0?1.3:1;
+    const workGrossEst=Math.round(((a.singing+a.dance)/12+4)*mvBonus*prMult);
+    const workEst=companyIncomeFromGross(workGrossEst,a);
+    const trainMax=Math.round(3*eff);
+    const healthBonus=(G.buildings.health?.lv||0)*3;
+    const preview={
+      '训练中':`唱/舞 +0~${trainMax} · 演 +0~${Math.round(trainMax*0.7)} · 精力 -${staminaDrain(a,true)}${energy<=20?' ⚠️效率-40%':''}`,
+      '工作中':`预计公司收入 +${workEst}~${companyIncomeFromGross(workGrossEst+8,a)}万 · 分成${getCompanyShare(a)}% · 精力 -${staminaDrain(a)}${energy<=20?' ⚠️效率-40%':''}`,
+      '休息中':`精力 +${staminaRecovery(a)}`,
+      '已出道':`预计公司收入 +${workEst}~${companyIncomeFromGross(workGrossEst+8,a)}万 · 分成${getCompanyShare(a)}% · 精力 -${staminaDrain(a)}${energy<=20?' ⚠️效率-40%':''}`,
+    }[a.status]||'';
+    return `<div class="artist-row" style="flex-wrap:wrap;gap:8px;align-items:flex-start">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <span style="font-size:10px;color:#999;flex-shrink:0">⚡ 精力</span>
+          <div style="flex:1;height:6px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:90px">
+            <div style="height:100%;border-radius:99px;background:${eColor};width:${energy}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:10px;font-weight:700;color:${eColor}">${energy} · ${eLabel}</span>
+        </div>
+        ${preview?`<div style="font-size:10px;color:#555;margin-top:4px;background:#f5f4f0;padding:3px 7px;border-radius:5px">📊 ${preview}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-sm" onclick="setStatus(${i},'训练中')" ${a.status==='训练中'?'disabled':''}>训练</button>
+          <button class="btn btn-sm btn-success" onclick="setStatus(${i},'工作中')" ${a.status==='工作中'||a.status==='已出道'?'disabled':''}>接工作</button>
+          <button class="btn btn-sm" onclick="setStatus(${i},'休息中')" ${a.status==='休息中'?'disabled':''}>休息</button>
+        </div>
+        <div style="font-size:10px;color:#aaa;text-align:right;line-height:1.4">「接工作」为每月自动结算的日常收入<br>与活动赛事的大型项目互不冲突，可叠加</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPrTab(){
+  const el=document.getElementById('pr-list');
+  if(!G.artists.length){el.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';return;}
+  el.innerHTML=G.artists.map((a,i)=>{
+    const pr=a.pr||60;
+    const canFanmeet=G.artists.some(x=>x.status==='工作中'||x.status==='已出道');
+    return `<div class="artist-row" style="align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div class="avatar" style="background:${a.color};color:${a.tc};flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${displayName(a)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <div style="flex:1;height:7px;background:#f0ede6;border-radius:99px;overflow:hidden;max-width:120px">
+            <div style="height:100%;border-radius:99px;background:${prColor(pr)};width:${pr}%;transition:width .4s"></div>
+          </div>
+          <span style="font-size:12px;font-weight:700;color:${prColor(pr)}">${pr}</span>
+        </div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:${prBg(pr)};color:${prColor(pr)};font-weight:600">${prLabel(pr)}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+        <button class="btn btn-sm" onclick="doPrAction(${i},'clarify')" ${pr>=60?'disabled':''} title="口碑低于60时有效">澄清声明 <strong>5万</strong></button>
+        <button class="btn btn-sm btn-primary" onclick="doPrAction(${i},'news')">策划正面新闻 <strong>20万</strong></button>
+        <button class="btn btn-sm btn-success" onclick="doPrAction(${i},'fanmeet')" ${!canFanmeet?'disabled':''} title="${canFanmeet?'':'需先有出道艺人'}">粉丝见面会 <strong>30万</strong></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function doPrAction(i,action){
+  const a=G.artists[i];
+  const pr=a.pr||60;
+  if(action==='clarify'){
+    if(pr>=60){toast('当前口碑正常，无需澄清','error');return;}
+    if(G.money<5){toast('资金不足 5万','error');return;}
+    G.money-=5; a.pr=Math.min(100,pr+15);
+    addLog('为'+displayName(a)+'发表澄清声明','minus',5);
+    toast(displayName(a)+' 口碑 +15，现为 '+a.pr,'success');
+  } else if(action==='news'){
+    if(G.money<20){toast('资金不足 20万','error');return;}
+    G.money-=20;
+    addLog('为'+displayName(a)+'策划正面新闻','minus',20);
+    if(Math.random()<0.3){
+      a.pr=Math.max(0,pr-10);
+      toast('操作被识破！'+displayName(a)+' 口碑 -10，现为 '+a.pr,'error');
+    } else {
+      a.pr=Math.min(100,pr+30);
+      toast(displayName(a)+' 正面新闻奏效，口碑 +30，现为 '+a.pr,'success');
+    }
+  } else if(action==='fanmeet'){
+    if(!G.artists.some(x=>x.status==='工作中'||x.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+    if(G.money<30){toast('资金不足 30万','error');return;}
+    G.money-=30;
+    a.pr=Math.min(100,pr+25);
+    a.fans=Math.round((a.fans||0)*1.15+5);
+    addLog('为'+displayName(a)+'举办粉丝见面会','minus',30);
+    toast(displayName(a)+' 见面会圆满！口碑 +25，粉丝 +15%','success');
+    renderArtistList();
+  }
+  saveGame(); renderPrTab(); updateStats();
+}
+
+function statusCls(s){return s==='训练中'?'status-training':s==='已出道'?'status-debut':s==='工作中'?'status-working':'status-idle';}
+
+function setStatus(i,s){
+  G.artists[i].status=s;
+  renderArtistList();renderTrainList();updateSidebar();saveGame();
+  toast(displayName(G.artists[i])+' 状态已更新为「'+s+'」','success');
+}
+
+function getBuildingContrib(k,b){
+  if(b.lv===0) return null;
+  if(k==='live')     return `每月稳定收入 +${b.lv*18}万`;
+  if(k==='practice') return `训练效率 +${b.lv*20}%（当前${Math.round(b.lv*20)}%加成）`;
+  if(k==='studio'){
+    const can=['数字单曲'];
+    if(b.lv>=2) can.push('MV','纪录片');
+    if(b.lv>=3) can.push('实体专辑');
+    return '可发行：'+can.join(' / ');
+  }
+  if(k==='mv')       return `演出 & 内容发行收益 ×1.3`;
+  if(k==='office')   return `签约上限 ${2+b.lv*2}人（当前${G.artists.length}人）`;
+  if(k==='merch'){
+    const tf=G.artists.reduce((s,a)=>s+(a.fans||0),0);
+    return `粉丝月收益 +${Math.round(tf/100*b.lv*2)}万（当前${tf}万粉丝）`;
+  }
+  if(k==='media')  return `负面事件概率 -${b.lv*8}%，口碑效果增强`;
+  if(k==='health') return `防意外停工 · 休息艺人每月口碑恢复+3`;
+  if(k==='legal')     return `合同续签费 -${b.lv*10}% · 发声明口碑 +${15+b.lv*5}`;
+  if(k==='rehearsal') return `出道艺人演出月收益 +${b.lv*10}%`;
+  if(k==='wardrobe')  return `出道艺人粉丝增速 +${b.lv*10}%`;
+  if(k==='makeup')    return `全员每月口碑 +${b.lv}`;
+  return null;
+}
+
+function getBuildingActionCfg(k){
+  return {
+    live:     {label:'直播冲榜', cost:20,  desc:'额外获得本级双倍直播收入'},
+    practice: {label:'集中培训', cost:15,  desc:'所有训练中艺人全属性 +5'},
+    studio:   {label:'加急录制', cost:30,  desc:'最早的制作中内容立即完成'},
+    mv:       {label:'精制特效', cost:35,  desc:'当前所有上线内容额外结算一次收益'},
+    office:   {label:'商务拓展', cost:0,   desc:'随机获得商务合作收益'},
+    merch:    {label:'限定周边', cost:30,  desc:'出道艺人粉丝×1.12，套现周边收益'},
+    media:    {label:'公关攻势', cost:25,  desc:'全员口碑+12，移除最差负面趋势'},
+    health:    {label:'紧急复健', cost:20,  desc:'粉丝最多的休息艺人立即恢复工作'},
+    legal:     {label:'发声明',   cost:20,  desc:'为口碑最差艺人发布官方声明，消除负面影响'},
+    rehearsal: {label:'联排演练', cost:25,  desc:'本月工作中艺人演出收益翻倍'},
+    wardrobe:  {label:'换装发布', cost:20,  desc:'出道艺人粉丝+12%，口碑+8'},
+    makeup:    {label:'精修造型', cost:15,  desc:'出道艺人口碑+20'},
+  }[k];
+}
+
+function doFacilityAction(k){
+  const b=G.buildings[k];
+  if(!b||b.lv===0){toast('请先建造该设施','error');return;}
+  if((G.buildingActions||{})[k]>=G.month){toast('本月已使用过该行动','error');return;}
+  const cfg=getBuildingActionCfg(k);
+  if(!cfg) return;
+  // 前置条件检查
+  if(k==='practice'&&!G.artists.some(a=>a.status==='训练中')){toast('当前没有训练中的艺人','error');return;}
+  if(k==='studio'&&!G.pendingReleases?.length){toast('当前没有制作中的内容','error');return;}
+  if(k==='mv'&&!G.releases?.length){toast('当前没有上线的内容','error');return;}
+  if(k==='merch'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(k==='health'&&!G.artists.some(a=>a.status==='休息中')){toast('当前没有休息中的艺人','error');return;}
+  if(k==='legal'&&!G.artists.some(a=>(a.pr||60)<90)){toast('当前没有艺人需要公关危机处理','error');return;}
+  if(k==='rehearsal'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(k==='wardrobe'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(k==='makeup'&&!G.artists.some(a=>a.status==='工作中'||a.status==='已出道')){toast('需要至少一名出道艺人','error');return;}
+  if(G.money<cfg.cost){toast('资金不足 '+cfg.cost+' 万','error');return;}
+  if(cfg.cost>0){G.money-=cfg.cost;addLog(b.name+'·'+cfg.label,'minus',cfg.cost);}
+  if(!G.buildingActions) G.buildingActions={};
+  G.buildingActions[k]=G.month;
+  let result='';
+  if(k==='live'){
+    const bonus=b.lv*18*2;
+    G.money+=bonus; addLog('直播冲榜收益','plus',bonus);
+    result='额外收益 +'+bonus+'万';
+  } else if(k==='practice'){
+    const list=G.artists.filter(a=>a.status==='训练中');
+    list.forEach(a=>{a.singing=Math.min(99,a.singing+5);a.dance=Math.min(99,a.dance+5);a.acting=Math.min(99,a.acting+3);});
+    result=list.length+'名艺人全属性 +5（+3演技）';
+  } else if(k==='studio'){
+    const target=G.pendingReleases.reduce((a,b)=>a.goLiveAt<b.goLiveAt?a:b);
+    target.goLiveAt=G.month;
+    result='「'+target.title+'」下月完成制作';
+  } else if(k==='mv'){
+    let bonus=0;
+    G.releases.forEach(r=>{
+      const age=G.month-r.releasedAt;
+      const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+      const g=Math.round(r.baseIncome*mult*0.5);
+      if(g>0){bonus+=g;}
+    });
+    if(bonus>0){G.money+=bonus;addLog('MV精制特效收益','plus',bonus);}
+    result='内容精制额外收益 +'+bonus+'万';
+  } else if(k==='office'){
+    const bonus=Math.round(20+Math.random()*40*b.lv);
+    G.money+=bonus; addLog('商务拓展收益','plus',bonus);
+    result='获得商务合作 +'+bonus+'万';
+  } else if(k==='merch'){
+    const working=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道');
+    let bonus=0;
+    working.forEach(a=>{const prev=a.fans||0;a.fans=Math.round(prev*1.12);bonus+=Math.round(prev*0.08*b.lv);});
+    if(bonus>0){G.money+=bonus;addLog('限定周边销售收益','plus',bonus);}
+    result=working.length+'名艺人粉丝×1.12，周边收益 +'+bonus+'万';
+  } else if(k==='media'){
+    G.artists.forEach(a=>{a.pr=Math.min(100,(a.pr||60)+12);});
+    const bad=(G.activeTrends||[]).find(t=>t.bad);
+    if(bad){G.activeTrends=G.activeTrends.filter(t=>t!==bad);result='全员口碑+12，已移除负面趋势「'+bad.name+'」';}
+    else result='全员口碑+12（当前无负面趋势）';
+  } else if(k==='health'){
+    const resting=G.artists.filter(a=>a.status==='休息中');
+    const target=resting.reduce((b,a)=>((a.fans||0)>(b.fans||0)?a:b));
+    target.status='工作中';
+    result=displayName(target)+' 复健完毕，已恢复工作状态';
+  } else if(k==='legal'){
+    const target=[...G.artists].sort((a,b)=>(a.pr||60)-(b.pr||60))[0];
+    const boost=15+(G.buildings.legal?.lv||1)*5;
+    const before=target.pr||60;
+    target.pr=Math.min(100,before+boost);
+    result=displayName(target)+` 发布官方声明，口碑 ${before}→${target.pr}`;
+  } else if(k==='rehearsal'){
+    if(!G.rehearsalBoostMonth) G.rehearsalBoostMonth=0;
+    G.rehearsalBoostMonth=G.month;
+    result='本月出道艺人演出收益翻倍';
+  } else if(k==='wardrobe'){
+    const list=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道');
+    list.forEach(a=>{a.fans=Math.round((a.fans||0)*1.12);a.pr=Math.min(100,(a.pr||60)+8);});
+    result=list.length+'名艺人粉丝+12%，口碑+8';
+  } else if(k==='makeup'){
+    const list=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道');
+    list.forEach(a=>{a.pr=Math.min(100,(a.pr||60)+20);});
+    result=list.length+'名艺人口碑+20';
+  }
+  saveGame();renderBuildings();updateStats();updateOverview();
+  if(k==='practice'||k==='merch'||k==='media'||k==='health'||k==='legal'||k==='wardrobe'||k==='makeup') renderArtistList();
+  toast('✨ '+cfg.label+'：'+result,'success');
+}
+
+function renderBuildings(){
+  const el=document.getElementById('build-grid');
+  el.innerHTML=Object.entries(G.buildings).map(([k,b])=>{
+    const lockEntry=BUILDING_UNLOCK[k];
+    const locked=lockEntry&&!lockEntry.check();
+    const contrib=getBuildingContrib(k,b);
+    const cfg=getBuildingActionCfg(k);
+    const used=(G.buildingActions||{})[k]>=G.month;
+    const pending=(G.pendingBuilds||[]).find(p=>p.k===k);
+    const monthsLeft=pending?pending.completeAt-G.month:0;
+    if(locked) return `
+    <div class="build-card" style="pointer-events:none;border:1.5px dashed #d1d5db;background:#fafafa">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:38px;height:38px;border-radius:10px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.5">${b.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#6b7280">${b.name}</div>
+          <div style="font-size:11px;color:#9ca3af">${b.effect}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:6px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:7px 10px">
+        <span style="font-size:13px;flex-shrink:0">🔒</span>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:1px">解锁条件</div>
+          <div style="font-size:12px;color:#92400e">${lockEntry.hint}</div>
+        </div>
+      </div>
+      <div class="lv-bar"><div class="lv-fill" style="width:0%"></div></div>
+      <button class="btn btn-sm" disabled style="color:#9ca3af">尚未解锁</button>
+    </div>`;
+    return `
+    <div class="build-card">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:38px;height:38px;border-radius:10px;background:${b.lv>0?'#f0fdf4':'#f5f4f0'};display:flex;align-items:center;justify-content:center;font-size:18px">${pending?'🔨':b.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${b.name}</div>
+          <div style="font-size:11px;color:${pending?'#d97706':'#999'}">${pending?'施工中 → Lv.'+pending.targetLv+'（还需'+monthsLeft+'月）':(b.lv===0?'未建设':'Lv.'+b.lv+'/'+b.maxLv)}</div>
+        </div>
+      </div>
+      ${contrib?`<div style="font-size:11px;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 9px;border-radius:6px;font-weight:500">📊 ${contrib}</div>`
+               :`<div style="font-size:11px;color:#999;background:#f5f4f0;padding:5px 9px;border-radius:6px">${b.effect}</div>`}
+      <div class="lv-bar"><div class="lv-fill" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm ${b.lv===0&&!pending?'btn-primary':''}" onclick="upgradeBuilding('${k}')" ${(b.lv>=b.maxLv||pending)?'disabled':''}>
+            ${pending?'🔨 建设中':(b.lv===0?'建造':'升级')+' ('+b.cost+'万)'}
+          </button>
+          ${b.lv>0?`<button class="btn btn-sm" onclick="enterRoom('${k}')">进入 →</button>`:''}
+        </div>
+        ${b.lv>0&&cfg?`<button class="btn btn-sm" style="justify-content:center;background:${used?'':'#fefce8'};border-color:${used?'':'#fde047'};color:${used?'':'#854d0e'}" onclick="doFacilityAction('${k}')" ${used?'disabled':''}>
+          ${used?'✅ 本月已行动':'⚡ '+cfg.label+(cfg.cost>0?' · '+cfg.cost+'万':' · 免费')}
+        </button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildDuration(targetLv){
+  if(targetLv<=1) return 1;
+  if(targetLv<=3) return 2;
+  if(targetLv<=5) return 3;
+  return 4;
+}
+function upgradeBuilding(k){
+  const b=G.buildings[k];
+  const lockEntry=BUILDING_UNLOCK[k];
+  if(lockEntry&&!lockEntry.check()){toast('🔒 '+b.name+' 尚未解锁 · '+lockEntry.hint,'error');return;}
+  if(b.lv>=b.maxLv){toast('已达最高等级','error');return;}
+  if((G.pendingBuilds||[]).some(p=>p.k===k)){toast('该设施正在建设中','error');return;}
+  if(G.money<b.cost){toast('资金不足 '+b.cost+' 万！','error');return;}
+  const paid=b.cost;
+  const targetLv=b.lv+1;
+  const dur=buildDuration(targetLv);
+  G.money-=paid;
+  b.cost=Math.round(b.cost*1.5);
+  if(!G.pendingBuilds) G.pendingBuilds=[];
+  G.pendingBuilds.push({k, targetLv, completeAt:G.month+dur});
+  addLog((targetLv===1?'开工建造':'开始升级')+b.name+'→Lv.'+targetLv,'minus',paid);
+  renderBuildings();updateStats();updateOverview();saveGame();
+  toast(b.name+(targetLv===1?' 开始建造，':'  Lv.'+targetLv+' 施工中，')+dur+'个月后完工','success');
+}
+
+function renderEvents(){
+  const el=document.getElementById('event-list');
+  const pending=G.pendingEvents||[];
+  const timed=G.timedEvents||[];
+  let html='';
+  // 限时活动
+  if(timed.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:#b45309;letter-spacing:.5px;margin-bottom:8px">⚡ 限时机会（${timed.length}）</div>`;
+    html+=timed.map(te=>{
+      const ev=TIMED_EVENTS.find(t=>t.id===te.id);
+      if(!ev) return '';
+      const remaining=te.expiresAt-G.month;
+      const alreadyPending=(G.pendingEvents||[]).some(p=>p.timedEventId===te.id);
+      const ok=ev.check();
+      const btnLabel=alreadyPending?'进行中':ok?'立即参加 →':'条件不足';
+      return `
+      <div class="event-item" style="border:2px solid #fde68a;background:#fffbeb;position:relative">
+        <div style="position:absolute;top:6px;right:8px;font-size:10px;background:#fef3c7;color:#92400e;border-radius:99px;padding:2px 8px;font-weight:600">⏰ 还有 ${remaining} 个月消失</div>
+        <div class="event-icon" style="background:${ev.bg}">${ev.icon}</div>
+        <div class="event-info">
+          <div class="event-name">${ev.name}</div>
+          <div class="event-desc">${ev.desc}</div>
+          <div style="font-size:11px;color:#999;margin-top:3px">📋 ${ev.req}${ev.cost>0?' · 报名费 '+ev.cost+'万':''}</div>
+          <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 至少 ${ev.minArtists} 名 · ${ev.statHint} · ⏳ ${ev.duration}个月后结算</div>
+        </div>
+        <button class="btn btn-sm ${ok&&!alreadyPending?'btn-primary':''}" style="flex-shrink:0;align-self:center;white-space:nowrap;background:${ok&&!alreadyPending?'#d97706':''}; color:${ok&&!alreadyPending?'#fff':''}" onclick="${ok&&!alreadyPending?'openTimedEventModal(\''+te.id+'\')':''}" ${alreadyPending||!ok?'disabled':''}>
+          ${btnLabel}
+        </button>
+      </div>`;
+    }).filter(Boolean).join('');
+    html+=`<div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;margin:12px 0 8px">进行中 / 常规活动</div>`;
+  }
+  // 进行中的活动
+  if(pending.length){
+    if(!timed.length) html+=`<div style="font-size:11px;font-weight:600;color:#7c3aed;letter-spacing:.5px;margin-bottom:8px">⏳ 进行中（${pending.length}）</div>`;
+    html+=pending.map(pe=>`
+      <div class="event-item" style="border-color:#e9d5ff;background:#fdf4ff">
+        <div class="event-icon" style="background:${pe.bg||'#f5f4f0'}">${pe.icon}</div>
+        <div class="event-info">
+          <div class="event-name">${pe.name}</div>
+          <div style="font-size:12px;color:#7c3aed;font-weight:500;margin-top:4px">⏳ 还需 ${pe.completeAt-G.month} 个月揭晓结果</div>
+          <div style="font-size:11px;color:#999;margin-top:3px">预计奖励：⭐+${pe.r.fame} 知名度 · 💰+${pe.r.money}万</div>
+        </div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:600;flex-shrink:0;align-self:center">进行中</div>
+      </div>`).join('');
+    if(!timed.length) html+=`<div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;margin:12px 0 8px">可参加活动</div>`;
+  }
+  html+=EVENTS.map((ev,i)=>{
+    const used=G.usedEvents.includes(i);
+    const ok=ev.check();
+    const btnLabel=used?'本月已参加':ok?'选派艺人 →':'条件不足';
+    return `
+    <div class="event-item" style="opacity:${!ok&&!used?0.6:1}">
+      <div class="event-icon" style="background:${ev.bg}">${ev.icon}</div>
+      <div class="event-info">
+        <div class="event-name">${ev.name}</div>
+        <div class="event-desc">${ev.desc}</div>
+        <div style="font-size:11px;color:#999;margin-top:3px">📋 ${ev.req}${ev.cost>0?' · 报名费 '+ev.cost+'万':''}</div>
+        <div style="font-size:11px;color:#7c3aed;margin-top:3px;font-weight:500">👤 至少 ${ev.minArtists} 名 · ${ev.statHint} · ⏳ ${ev.duration}个月后结算</div>
+        <div class="event-reward" style="color:#666">🏅 知名度  💰 收益（根据选派艺人实力动态计算）</div>
+      </div>
+      <button class="btn btn-sm ${ok&&!used?'btn-primary':''}" style="flex-shrink:0;align-self:center;white-space:nowrap" onclick="${ok&&!used?'openEventModal('+i+')':''}" ${used||!ok?'disabled':''}>
+        ${btnLabel}
+      </button>
+    </div>`;
+  }).join('');
+  el.innerHTML=html;
+}
+
+function openEventModal(i){
+  currentEventIdx=i;
+  currentEventIsTimed=false;
+  currentTimedEventId=null;
+  selectedEventArtists=[];
+  const ev=EVENTS[i];
+  document.getElementById('event-modal-title').textContent=ev.icon+' '+ev.name;
+  document.getElementById('event-modal-desc').textContent=ev.desc;
+  document.getElementById('event-modal-cost').textContent=ev.cost>0?'⚠️ 报名费用：'+ev.cost+' 万':'';
+  document.getElementById('event-select-hint').textContent='至少选 '+ev.minArtists+' 名艺人出战，多派多得（关键属性：'+ev.statHint+'）';
+  renderEventArtistList();
+  updateEventOutcomePreview();
+  document.getElementById('modal-event').classList.add('open');
+}
+
+function openTimedEventModal(id){
+  const ev=TIMED_EVENTS.find(t=>t.id===id);
+  if(!ev) return;
+  currentEventIdx=-1;
+  currentEventIsTimed=true;
+  currentTimedEventId=id;
+  selectedEventArtists=[];
+  document.getElementById('event-modal-title').textContent='⚡ '+ev.icon+' '+ev.name;
+  document.getElementById('event-modal-desc').textContent=ev.desc;
+  document.getElementById('event-modal-cost').textContent=ev.cost>0?'⚠️ 报名费用：'+ev.cost+' 万':'';
+  document.getElementById('event-select-hint').textContent='至少选 '+ev.minArtists+' 名艺人出战，多派多得（关键属性：'+ev.statHint+'）';
+  renderEventArtistList();
+  updateEventOutcomePreview();
+  document.getElementById('modal-event').classList.add('open');
+}
+
+function closeEventModal(){
+  document.getElementById('modal-event').classList.remove('open');
+  currentEventIdx=-1;
+  currentEventIsTimed=false;
+  currentTimedEventId=null;
+  selectedEventArtists=[];
+}
+
+function artistEventLimit(a){
+  const avg=(a.singing+a.dance+a.acting+a.rap)/4;
+  if(avg>=85) return 3;
+  if(avg>=70) return 2;
+  return 1;
+}
+
+function renderEventArtistList(){
+  if(currentEventIdx<0&&!currentEventIsTimed) return;
+  const ev=currentEventIsTimed?TIMED_EVENTS.find(t=>t.id===currentTimedEventId):EVENTS[currentEventIdx];
+  if(!ev) return;
+  const el=document.getElementById('event-artist-list');
+  const eligible=G.artists.filter(a=>ev.artistCheck(a));
+  if(!eligible.length){
+    el.innerHTML='<div style="font-size:13px;color:#999;padding:8px 0">没有符合条件的艺人</div>';
+    return;
+  }
+  el.innerHTML=eligible.map(a=>{
+    const ai=G.artists.indexOf(a);
+    const sel=selectedEventArtists.includes(ai);
+    const used=(G.usedEventArtists||{})[ai]||0;
+    const limit=artistEventLimit(a);
+    const busy=!sel&&used>=limit;
+    const clickable=!busy;
+    const avg=Math.round((a.singing+a.dance+a.acting+a.rap)/4);
+    const slotTag=limit>1
+      ?`<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px">可接${limit}场/月</span>`
+      :'';
+    const usedTag=used>0
+      ?`<span style="font-size:10px;color:#999;font-weight:400;margin-left:5px">本月已参加${used}场${busy?' · 已满':'（还剩'+(limit-used)+'场）'}</span>`
+      :'';
+    return `<div ${clickable?'onclick="toggleEventArtist('+ai+')"':''} style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1.5px solid ${sel?'#1a1a1a':'#e8e5de'};border-radius:10px;${clickable?'cursor:pointer;':'cursor:not-allowed;'}margin-bottom:7px;background:${sel?'#f0ede6':busy?'#fafafa':'#fff'};opacity:${busy?0.45:1};transition:all .15s">
+      <div style="width:34px;height:34px;border-radius:50%;background:${a.color};color:${a.tc};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${a.abbr}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${displayName(a)}${slotTag}${usedTag}</div>
+        <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap">
+          <span style="font-size:10px;color:#555;background:#e3f2fd;padding:1px 5px;border-radius:99px">唱${a.singing}</span>
+          <span style="font-size:10px;color:#555;background:#fff8e1;padding:1px 5px;border-radius:99px">舞${a.dance}</span>
+          <span style="font-size:10px;color:#555;background:#e8f5e9;padding:1px 5px;border-radius:99px">演${a.acting}</span>
+          <span style="font-size:10px;color:#555;background:#f5f4f0;padding:1px 5px;border-radius:99px">${a.fans||0}万粉</span>
+          <span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${prBg(a.pr||60)};color:${prColor(a.pr||60)}">口碑${a.pr||60}</span>
+          <span style="font-size:10px;color:#888;background:#f0ede6;padding:1px 5px;border-radius:99px">均${avg}</span>
+        </div>
+      </div>
+      <div style="font-size:20px">${sel?'✅':busy?'🔒':'⬜'}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleEventArtist(ai){
+  if(currentEventIdx<0&&!currentEventIsTimed) return;
+  const a=G.artists[ai];
+  const used=(G.usedEventArtists||{})[ai]||0;
+  if(used>=artistEventLimit(a)&&!selectedEventArtists.includes(ai)) return;
+  const idx=selectedEventArtists.indexOf(ai);
+  if(idx>=0){
+    selectedEventArtists.splice(idx,1);
+  } else {
+    selectedEventArtists.push(ai);
+  }
+  renderEventArtistList();
+  updateEventOutcomePreview();
+}
+
+function updateEventOutcomePreview(){
+  if(currentEventIdx<0&&!currentEventIsTimed) return;
+  const ev=currentEventIsTimed?TIMED_EVENTS.find(t=>t.id===currentTimedEventId):EVENTS[currentEventIdx];
+  if(!ev) return;
+  const btn=document.getElementById('event-confirm-btn');
+  const preview=document.getElementById('event-outcome-preview');
+  const ready=selectedEventArtists.length>=ev.minArtists;
+  btn.disabled=!ready;
+  if(ready){
+    const sel=selectedEventArtists.map(i=>G.artists[i]);
+    const r=ev.compute(sel);
+    preview.style.display='';
+    preview.innerHTML=`<div style="font-size:11px;color:#999;font-weight:600;margin-bottom:6px">预计收益（已选 ${sel.length} 人）</div>
+      <div style="display:flex;gap:20px;margin-bottom:6px">
+        <span style="color:#2e7d32;font-weight:700;font-size:15px">⭐ +${r.fame} 知名度</span>
+        <span style="color:#1565c0;font-weight:700;font-size:15px">💰 +${r.money} 万</span>
+      </div>
+      <div style="font-size:11px;color:#7c3aed;font-weight:500">⏳ 进行中 ${ev.duration} 个月后结算奖励</div>`;
+  } else {
+    preview.style.display='none';
+  }
+}
+
+function confirmEventWithArtists(){
+  if(currentEventIdx<0&&!currentEventIsTimed) return;
+  const ev=currentEventIsTimed?TIMED_EVENTS.find(t=>t.id===currentTimedEventId):EVENTS[currentEventIdx];
+  if(!ev) return;
+  if(selectedEventArtists.length<ev.minArtists){toast('至少选 '+ev.minArtists+' 名艺人','error');return;}
+  if(!currentEventIsTimed&&G.usedEvents.includes(currentEventIdx)){toast('本月已参加过此活动','error');return;}
+  if(!ev.check()){toast('条件不满足','error');return;}
+  if(G.money<ev.cost){toast('资金不足！','error');return;}
+  const sel=selectedEventArtists.map(i=>G.artists[i]);
+  const r=ev.compute(sel);
+  if(!currentEventIsTimed){
+    if(hasTrend('idol_boom')&&ev.name==='新人选秀综艺'){r.fame=Math.round(r.fame*1.5);r.money=Math.round(r.money*1.5);}
+    if(hasTrend('concert_craze')&&ev.name==='演唱会巡演'){r.fame=Math.round(r.fame*1.5);r.money=Math.round(r.money*1.5);}
+    if(ev.name==='品牌代言活动'){const m=(hasTrend('ad_market_up')?1.6:1)*(hasAgent('biz')?1.4:1);r.money=Math.round(r.money*m);r.fame=Math.round(r.fame*m);}
+    G.usedEvents.push(currentEventIdx);
+  }
+  if(hasTrend('economy_down')){r.money=Math.round(r.money*0.75);}
+  if(!G.usedEventArtists||Array.isArray(G.usedEventArtists)) G.usedEventArtists={};
+  selectedEventArtists.forEach(ai=>{
+    G.usedEventArtists[ai]=(G.usedEventArtists[ai]||0)+1;
+    const a=G.artists[ai];
+    if(G.usedEventArtists[ai]>1) a.energy=Math.max(0,(a.energy||80)-10);
+  });
+  if(ev.cost>0){G.money-=ev.cost;addLog(ev.name+' 报名费','minus',ev.cost);}
+  const completeAt=G.month+ev.duration;
+  const entry={name:ev.name,icon:ev.icon,bg:ev.bg,artistIndices:[...selectedEventArtists],r,completeAt,duration:ev.duration};
+  if(currentEventIsTimed){
+    entry.timedEventId=currentTimedEventId;
+    G.timedEvents=(G.timedEvents||[]).filter(te=>te.id!==currentTimedEventId);
+  } else {
+    entry.evIdx=currentEventIdx;
+  }
+  G.pendingEvents.push(entry);
+  closeEventModal();
+  updateStats();updateOverview();updateTips();renderEvents();saveGame();checkAchievements();
+  toast('🎬 '+ev.name+' 已开始！'+ev.duration+'个月后揭晓结果','success');
+}
+
+let recruitPool=[];
+let recruitContractMonths=24;
+function contractCostMult(m){return{12:0.7,24:1.0,36:1.25,48:1.5,60:1.75}[m]||1.0;}
+function calcRecruitCost(base){return Math.round(base*contractCostMult(recruitContractMonths));}
+
+const SCOUT_ROUTES=[
+  {id:'campus',label:'校园选拔',cost:25,count:3,desc:'稳定新人',focus:['singing','acting'],weights:{'普通':45,'良好':34,'优秀':15,'稀有':5,'✨传奇':1}},
+  {id:'street',label:'街头发掘',cost:40,count:3,desc:'舞台感更强',focus:['dance','rap'],weights:{'普通':34,'良好':36,'优秀':20,'稀有':8,'✨传奇':2}},
+  {id:'online',label:'网络达人',cost:55,count:4,desc:'初始粉丝更高',focus:['singing','rap'],weights:{'普通':30,'良好':34,'优秀':24,'稀有':10,'✨传奇':2},costMult:1.08,fanBonus:true},
+  {id:'overseas',label:'海外试训',cost:80,count:4,desc:'更容易出高潜',focus:['singing','dance','acting'],weights:{'普通':22,'良好':32,'优秀':28,'稀有':14,'✨传奇':4},costMult:1.15},
+];
+
+const SCOUT_RARITY_PROFILE={
+  '普通':{min:32,max:68,cost:[24,48]},
+  '良好':{min:44,max:78,cost:[42,76]},
+  '优秀':{min:56,max:88,cost:[72,118]},
+  '稀有':{min:66,max:96,cost:[108,168]},
+  '✨传奇':{min:78,max:99,cost:[165,240]},
+};
+const SCOUT_SURNAMES=['林','苏','顾','叶','沈','许','周','白','夏','秦','温','陆','江','程','宋','唐','黎','洛','纪','阮'];
+const SCOUT_GIVENS=['星遥','若宁','安澜','知夏','南乔','景行','云舒','鹿鸣','时雨','予安','青禾','洛尘','一澈','念初','以沫','清越','明栀','书言','晏辞','可颂'];
+const SCOUT_COLORS=[
+  {color:'#e0f2fe',tc:'#0369a1'},{color:'#fef3c7',tc:'#92400e'},{color:'#fce7f3',tc:'#831843'},
+  {color:'#dcfce7',tc:'#14532d'},{color:'#ede9fe',tc:'#4c1d95'},{color:'#fff1f2',tc:'#9f1239'},
+  {color:'#f0fdfa',tc:'#134e4a'},{color:'#eef2ff',tc:'#3730a3'}
+];
+const SCOUT_ZODIAC=['白羊座','金牛座','双子座','巨蟹座','狮子座','处女座','天秤座','天蝎座','射手座','摩羯座','水瓶座','双鱼座'];
+const SCOUT_HOMETOWNS=['北京','上海','广州','深圳','成都','杭州','南京','重庆','武汉','长沙','厦门','青岛','台北','香港','首尔','东京'];
+const SCOUT_PERSONALITIES=['清冷专注','元气外向','沉稳自律','灵气十足','反差感强','温柔坚定','镜头感强','野心明确'];
+const SCOUT_HOBBIES=['写歌·看展','街舞·滑板','拍短片·剪辑','健身·旅行','配音·读剧本','作曲·咖啡','时尚·摄影','说唱·球鞋'];
+const SCOUT_MBTI=['INFJ','INFP','ENFP','ENFJ','ISTP','ISFP','INTJ','ENTJ','ESFP','ESTP'];
+const SCOUT_DREAMS=['成为下一代顶流','完成万人巡演','拿到年度新人奖','推出代表作专辑','站上国际舞台','成为全能艺人','拍出破圈作品','打造个人厂牌'];
+const SCOUT_SPECIALTY={
+  singing:['声线辨识度','现场稳定度','高音爆发力','情绪唱腔'],
+  dance:['舞台律动','编舞理解','爆发型舞蹈','镜头走位'],
+  acting:['镜头表现','角色理解','情绪共情','台词质感'],
+  rap:['词曲创作','节奏控制','即兴说唱','潮流表达']
+};
+
+function scoutPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function scoutRand(min,max){return Math.floor(min+Math.random()*(max-min+1));}
+function scoutClamp(n){return Math.max(20,Math.min(99,Math.round(n)));}
+
+function pruneScoutedPool(){
+  if(!G.scoutedPool) G.scoutedPool=[];
+  const signed=new Set((G.artists||[]).map(a=>a.name));
+  G.scoutedPool=G.scoutedPool.filter(p=>p&&p.name&&!signed.has(p.name)&&(!p.expiresAt||p.expiresAt>G.month));
+}
+
+function scoutUniqueName(extraUsed=[]){
+  const used=new Set([
+    ...POOL.map(p=>p.name),
+    ...(G.artists||[]).map(a=>a.name),
+    ...(G.scoutedPool||[]).map(p=>p.name),
+    ...(recruitPool||[]).map(p=>p.name),
+    ...extraUsed,
+  ]);
+  for(let i=0;i<120;i++){
+    const name=scoutPick(SCOUT_SURNAMES)+scoutPick(SCOUT_GIVENS);
+    if(!used.has(name)) return name;
+  }
+  return scoutPick(SCOUT_SURNAMES)+scoutPick(SCOUT_GIVENS)+scoutRand(10,99);
+}
+
+function rollScoutRarity(route){
+  const weights={...route.weights};
+  if(hasAgent('scout')){
+    weights['普通']=Math.max(5,(weights['普通']||0)-10);
+    weights['优秀']=(weights['优秀']||0)+5;
+    weights['稀有']=(weights['稀有']||0)+4;
+    weights['✨传奇']=(weights['✨传奇']||0)+1;
+  }
+  const entries=Object.entries(weights);
+  const total=entries.reduce((s,entry)=>s+entry[1],0);
+  let roll=Math.random()*total;
+  for(const [rarity,weight] of entries){
+    roll-=weight;
+    if(roll<=0) return rarity;
+  }
+  return '普通';
+}
+
+function createScoutedCandidate(route, extraUsed=[]){
+  const rarity=rollScoutRarity(route);
+  const profile=SCOUT_RARITY_PROFILE[rarity]||SCOUT_RARITY_PROFILE['普通'];
+  const stats={
+    singing:scoutRand(profile.min,profile.max),
+    dance:scoutRand(profile.min,profile.max),
+    acting:scoutRand(profile.min,profile.max),
+    rap:scoutRand(profile.min,profile.max),
+  };
+  const focus=scoutPick(route.focus);
+  stats[focus]=scoutClamp(stats[focus]+scoutRand(8,18));
+  if(rarity==='稀有'||rarity==='✨传奇'){
+    Object.keys(stats).forEach(k=>{stats[k]=scoutClamp(stats[k]+scoutRand(2,8));});
+  }
+  const strongest=Object.entries(stats).sort((a,b)=>b[1]-a[1])[0][0];
+  const avg=Math.round((stats.singing+stats.dance+stats.acting+stats.rap)/4);
+  const color=scoutPick(SCOUT_COLORS);
+  const name=scoutUniqueName(extraUsed);
+  let cost=Math.round((scoutRand(profile.cost[0],profile.cost[1])+avg*0.35)*(route.costMult||1));
+  if(hasAgent('scout')) cost=Math.max(20,Math.round(cost*0.94));
+  return {
+    name,abbr:Array.from(name).slice(-1)[0],color:color.color,tc:color.tc,
+    ...stats,cost,rarity,
+    age:scoutRand(18,25),height:scoutRand(160,185),weight:scoutRand(45,76),
+    zodiac:scoutPick(SCOUT_ZODIAC),hometown:scoutPick(SCOUT_HOMETOWNS),
+    personality:scoutPick(SCOUT_PERSONALITIES),hobby:scoutPick(SCOUT_HOBBIES),
+    mbti:scoutPick(SCOUT_MBTI),dream:scoutPick(SCOUT_DREAMS),
+    specialty:scoutPick(SCOUT_SPECIALTY[strongest]),
+    startFans:route.fanBonus?scoutRand(6,14):scoutRand(1,4),
+    isScouted:true,source:route.label,scoutedAt:G.month,expiresAt:G.month+3
+  };
+}
+
+function refreshRecruitPool(){
+  pruneScoutedPool();
+  const signed=new Set(G.artists.map(a=>a.name));
+  const discovered=(G.scoutedPool||[]).filter(p=>!signed.has(p.name));
+  const blocked=new Set([...signed,...discovered.map(p=>p.name)]);
+  const available=POOL.filter(p=>!blocked.has(p.name));
+  recruitPool=[
+    ...discovered,
+    ...[...available].sort(()=>Math.random()-0.5).slice(0,hasAgent('scout')?6:4)
+  ];
+}
+
+function renderScoutRoutes(){
+  pruneScoutedPool();
+  const moneyEl=document.getElementById('modal-money');
+  if(moneyEl) moneyEl.textContent=G.money;
+  const info=document.getElementById('scout-info');
+  if(info){
+    const remain=(G.scoutedPool||[]).map(p=>(p.expiresAt||G.month)-G.month).filter(n=>n>0);
+    const expireText=remain.length?' · 最短'+Math.min(...remain)+'个月后失效':'';
+    info.textContent='已发现候选人 '+(G.scoutedPool||[]).length+' 人'+expireText;
+  }
+  const badge=document.getElementById('scout-agent-badge');
+  if(badge) badge.style.display=hasAgent('scout')?'inline-block':'none';
+  const el=document.getElementById('scout-route-list');
+  if(!el) return;
+  el.innerHTML=SCOUT_ROUTES.map(route=>{
+    const affordable=G.money>=route.cost;
+    const found=route.count+(hasAgent('scout')?1:0);
+    return `<button class="btn btn-sm" onclick="doScoutSearch('${route.id}')" ${affordable?'':'disabled'} style="align-items:flex-start;flex-direction:column;gap:2px;padding:8px;opacity:${affordable?'1':'.5'}">
+      <span style="display:flex;justify-content:space-between;width:100%;gap:6px;font-size:11px;font-weight:800;color:#1a1a1a"><span>${route.label}</span><span>${route.cost}万</span></span>
+      <span style="font-size:9px;color:#999;text-align:left;line-height:1.4">${route.desc} · ${found}人</span>
+    </button>`;
+  }).join('');
+}
+
+function doScoutSearch(routeId){
+  const route=SCOUT_ROUTES.find(r=>r.id===routeId);
+  if(!route) return;
+  pruneScoutedPool();
+  if(G.money<route.cost){toast('资金不足 '+route.cost+' 万！','error');return;}
+  G.money-=route.cost;
+  const count=route.count+(hasAgent('scout')?1:0);
+  const found=[];
+  for(let i=0;i<count;i++){
+    found.push(createScoutedCandidate(route, found.map(p=>p.name)));
+  }
+  G.scoutedPool=[...found,...(G.scoutedPool||[])].slice(0,12);
+  addLog('星探搜寻·'+route.label,'minus',route.cost);
+  refreshRecruitPool();
+  renderRecruitList();
+  updateStats();updateOverview();saveGame();
+  pushFeed('🔎','星探通过'+route.label+'发现 '+found.length+' 名候选人','info');
+  toast('星探发现 '+found.length+' 名候选人，候选人将在3个月后失效','success');
+}
+
+function selectContractDuration(m){
+  recruitContractMonths=m;
+  [12,24,36,48,60].forEach(v=>{
+    const btn=document.getElementById('cd-'+v);
+    if(!btn) return;
+    btn.className='btn btn-sm'+(v===m?' btn-primary':'');
+    btn.style.flex='1';btn.style.flexDirection='column';btn.style.gap='1px';btn.style.padding='6px 3px';
+  });
+  renderRecruitList();
+}
+
+const RARITY_STYLE={
+  '✨传奇':{bg:'#fef9c3',tc:'#92400e',border:'#fde047'},
+  '稀有':  {bg:'#ede9fe',tc:'#5b21b6',border:'#c4b5fd'},
+  '优秀':  {bg:'#dbeafe',tc:'#1e40af',border:'#93c5fd'},
+  '良好':  {bg:'#dcfce7',tc:'#14532d',border:'#86efac'},
+  '普通':  {bg:'#f5f4f0',tc:'#555',   border:'#e8e5de'},
+};
+
+function artistPhotoHTML(p){
+  if(p.image) return `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;display:block">`;
+  return `<svg viewBox="0 0 100 128" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;display:block">
+    <rect width="100" height="128" fill="${p.color}"/>
+    <text x="50" y="96" text-anchor="middle" font-size="88" font-weight="900" fill="${p.tc}" opacity="0.1" font-family="serif">${p.abbr}</text>
+    <circle cx="50" cy="44" r="23" fill="${p.tc}" opacity="0.38"/>
+    <path d="M-2,128 Q5,86 50,82 Q95,86 102,128 Z" fill="${p.tc}" opacity="0.28"/>
+  </svg>`;
+}
+
+function renderRecruitList(){
+  const el=document.getElementById('recruit-list');
+  renderScoutRoutes();
+  if(!recruitPool||!recruitPool.length){
+    el.innerHTML='<div style="grid-column:1/-1;padding:20px;text-align:center;color:#999;font-size:12px;border:1px dashed #e8e5de;border-radius:12px;background:#fbfaf7">暂无可招募候选人，可以先安排星探搜寻</div>';
+    return;
+  }
+  el.innerHTML=recruitPool.map((p,i)=>{
+    const cost=calcRecruitCost(p.cost);
+    const affordable=G.money>=cost;
+    const avg=Math.round((p.singing+p.dance+p.acting+p.rap)/4);
+    const rs=RARITY_STYLE[p.rarity]||RARITY_STYLE['普通'];
+    const acceptRate=recruitAcceptRate(p);
+    const arColor=acceptRate>=90?'#86efac':acceptRate>=70?'#fde68a':'#fca5a5';
+    const scoutTag=p.isScouted?'<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">星探 · '+p.source+'</div>':'';
+    const scoutNote=p.isScouted?'<div style="font-size:10px;color:#8b5cf6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:5px 7px;margin-bottom:8px;display:flex;justify-content:space-between"><span>星探候选</span><span>'+Math.max(1,(p.expiresAt||G.month+1)-G.month)+'个月后失效</span></div>':'';
+    return `
+    <div style="border-radius:14px;overflow:hidden;background:#fff;border:1.5px solid ${affordable?'#e8e5de':'#f0ede6'};${affordable?'':'opacity:.55'};transition:box-shadow .15s" onmouseenter="this.style.boxShadow='0 4px 16px rgba(0,0,0,.10)'" onmouseleave="this.style.boxShadow=''">
+      <div style="position:relative;aspect-ratio:3/4;overflow:hidden;background:${p.color};cursor:pointer" onclick="openArtistProfile(${i})">
+        ${artistPhotoHTML(p)}
+        ${scoutTag}
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .2s;display:flex;align-items:center;justify-content:center"
+             onmouseenter="this.style.background='rgba(0,0,0,.32)';this.querySelector('span').style.opacity='1'"
+             onmouseleave="this.style.background='rgba(0,0,0,0)';this.querySelector('span').style.opacity='0'">
+          <span style="color:#fff;font-size:11px;font-weight:600;background:rgba(255,255,255,.18);padding:5px 14px;border-radius:99px;border:1px solid rgba(255,255,255,.5);opacity:0;transition:opacity .2s;pointer-events:none">查看详情</span>
+        </div>
+        <div style="position:absolute;top:8px;right:8px;background:${rs.bg};color:${rs.tc};border:1px solid ${rs.border};font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">${p.rarity}</div>
+        <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.62));padding:20px 10px 10px">
+          <div style="color:#fff;font-size:14px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.4)">${p.name}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+            <span style="color:rgba(255,255,255,.75);font-size:10px">均值 ${avg}</span>
+            ${acceptRate<100?'<span style="font-size:9px;font-weight:700;color:'+arColor+';background:rgba(0,0,0,.45);padding:1px 6px;border-radius:99px">接受率'+acceptRate+'%</span>':'<span style="color:rgba(255,255,255,.55);font-size:9px">档案 →</span>'}
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px">
+        ${scoutNote}
+        <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px">
+          ${[['唱',p.singing,'#3b82f6'],['舞',p.dance,'#f59e0b'],['演',p.acting,'#22c55e'],['说',p.rap,'#ec4899']].map(([lbl,val,clr])=>`
+          <div style="display:flex;align-items:center;gap:5px;font-size:10px">
+            <span style="width:12px;color:#aaa;flex-shrink:0">${lbl}</span>
+            <div style="flex:1;height:4px;background:#f0ede6;border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:${clr};border-radius:99px;width:${val}%"></div>
+            </div>
+            <span style="width:20px;text-align:right;color:#555;font-weight:600;font-size:10px">${val}</span>
+          </div>`).join('')}
+        </div>
+        <button class="btn ${affordable?'btn-primary':''}" onclick="${affordable?'recruit('+i+')':''}" ${affordable?'':'disabled'} style="width:100%;justify-content:center;padding:7px;font-size:12px">
+          ${affordable?'💼 签约 · '+cost+'万':'资金不足 · '+cost+'万'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openRecruit(){
+  const maxArtists=2+G.buildings.office.lv*2;
+  if(G.artists.length>=maxArtists){toast('艺人数量已满，请升级经纪办公室','error');return;}
+  refreshRecruitPool();
+  document.getElementById('modal-money').textContent=G.money;
+  renderScoutRoutes();
+  selectContractDuration(recruitContractMonths);
+  document.getElementById('modal-recruit').classList.add('open');
+}
+
+function closeRecruit(){document.getElementById('modal-recruit').classList.remove('open');}
+
+function recruit(i){
+  const p=recruitPool[i];
+  const cost=calcRecruitCost(p.cost);
+  if(G.money<cost){toast('资金不足 '+cost+' 万！','error');return;}
+  const rate=recruitAcceptRate(p);
+  if(rate<100&&Math.floor(Math.random()*100)>=rate){
+    pushFeed('😔',p.name+' 婉拒了签约邀请（接受率'+rate+'%）','bad');
+    toast('😔 '+p.name+' 婉拒了邀请，认为公司知名度还不够高（接受率'+rate+'%）','error');
+    return;
+  }
+  G.money-=cost;
+  G.scoutedPool=(G.scoutedPool||[]).filter(sp=>sp.name!==p.name);
+  const {isScouted,source,scoutedAt,expiresAt,startFans,...artistData}=p;
+  G.artists.push({...artistData,status:'训练中',fans:startFans||Math.floor(Math.random()*3+1),alias:'',direction:null,totalIncome:0,totalGrossIncome:0,totalArtistShare:0,totalCost:cost,companyShare:defaultCompanyShare(artistData),pr:60,energy:100,contractEnd:G.month+recruitContractMonths,lastFanOp:0});
+  addLog('签约'+p.name+'（'+recruitContractMonths+'个月）','minus',cost);
+  updateStats();renderArtistList();updateOverview();updateSidebar();saveGame();checkAchievements();maybeRefreshArtistScene();closeRecruit();
+  pushFeed('🤝','签约 '+p.name+'（'+p.rarity+'）','good');
+  toast('成功签约 '+p.name+'！','success');
+}
+
+let profilePoolIdx=-1;
+
+function openArtistProfile(i){
+  profilePoolIdx=i;
+  const p=recruitPool[i];
+  const cost=calcRecruitCost(p.cost);
+  const affordable=G.money>=cost;
+  const avg=Math.round((p.singing+p.dance+p.acting+p.rap)/4);
+  const rs=RARITY_STYLE[p.rarity]||RARITY_STYLE['普通'];
+  const pRate=recruitAcceptRate(p);
+  const pRateColor=pRate>=90?'#16a34a':pRate>=70?'#d97706':pRate>=50?'#ea580c':'#dc2626';
+  const pRateHint=pRate<100?'<div style="margin-bottom:8px;padding:7px 12px;border-radius:8px;background:'+pRateColor+'18;border:1px solid '+pRateColor+'44;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:'+pRateColor+'">💭 接受率 '+pRate+'%</span><span style="font-size:10px;color:#999">'+(pRate>=90?'很可能接受签约':pRate>=70?'暧昧观望，可提升知名度':'可能拒绝，建议提升知名度')+'</span></div>':'';
+  const scoutProfileNote=p.isScouted?'<div style="margin-bottom:8px;padding:7px 12px;border-radius:8px;background:#f5f3ff;border:1px solid #ddd6fe;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:700;color:#7c3aed">🔎 星探候选 · '+p.source+'</span><span style="font-size:10px;color:#999">'+Math.max(1,(p.expiresAt||G.month+1)-G.month)+'个月后失效</span></div>':'';
+  document.getElementById('artist-profile-content').innerHTML=`
+  <div style="background:linear-gradient(135deg,${p.color},${p.color}99);padding:24px;display:flex;gap:18px;border-radius:20px 20px 0 0;align-items:flex-start">
+    <div style="width:110px;height:147px;border-radius:12px;overflow:hidden;flex-shrink:0;box-shadow:0 6px 20px rgba(0,0,0,.2)">
+      ${artistPhotoHTML(p)}
+    </div>
+    <div style="flex:1;min-width:0;padding-top:2px">
+      <span style="display:inline-block;background:${rs.bg};color:${rs.tc};border:1px solid ${rs.border};font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:8px">${p.rarity}</span>
+      <div style="font-size:26px;font-weight:800;color:#1a1a1a;line-height:1.2;margin-bottom:6px">${p.name}</div>
+      <div style="display:inline-flex;background:rgba(255,255,255,.65);padding:3px 10px;border-radius:99px;margin-bottom:12px">
+        <span style="font-size:11px;color:#555;font-weight:600">${p.specialty}</span>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div><div style="font-size:9px;color:#888;margin-bottom:1px">综合均值</div><div style="font-size:20px;font-weight:800;color:#1a1a1a">${avg}</div></div>
+        <div><div style="font-size:9px;color:#888;margin-bottom:1px">基础签约费</div><div style="font-size:20px;font-weight:800;color:${affordable?'#16a34a':'#dc2626'}">${cost}万</div></div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+    <div>
+      <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:1px;margin-bottom:10px">📋 基本档案</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        ${[['年龄',p.age+'岁'],['身高',p.height+'cm'],['体重',p.weight+'kg'],['星座',p.zodiac],['家乡',p.hometown],['MBTI',p.mbti]].map(([k,v])=>`
+        <div style="background:#f8f9fa;border-radius:10px;padding:10px 12px;text-align:center">
+          <div style="font-size:10px;color:#ccc;margin-bottom:4px">${k}</div>
+          <div style="font-size:13px;font-weight:700;color:#1a1a1a">${v}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:1px;margin-bottom:10px">🎭 个人特质</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        ${[['性格',p.personality],['特长',p.specialty]].map(([k,v])=>`
+        <div style="background:#f8f9fa;border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;color:#ccc;margin-bottom:3px">${k}</div>
+          <div style="font-size:12px;font-weight:600;color:#333">${v}</div>
+        </div>`).join('')}
+      </div>
+      <div style="background:#f8f9fa;border-radius:10px;padding:10px 14px;margin-bottom:8px">
+        <span style="font-size:10px;color:#ccc">爱好</span>
+        <span style="font-size:12px;font-weight:600;color:#333;margin-left:10px">${p.hobby}</span>
+      </div>
+      <div style="background:linear-gradient(135deg,${p.color}55,${p.color}22);border-left:3px solid ${p.tc};border-radius:0 10px 10px 0;padding:12px 14px">
+        <div style="font-size:10px;color:#aaa;margin-bottom:4px">✨ 梦想</div>
+        <div style="font-size:13px;font-weight:700;color:${p.tc}">${p.dream}</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:1px;margin-bottom:10px">🎵 演艺能力</div>
+      ${[['演唱',p.singing,'#3b82f6'],['舞蹈',p.dance,'#f59e0b'],['演技',p.acting,'#22c55e'],['说唱',p.rap,'#ec4899']].map(([lbl,val,clr])=>`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+        <span style="width:30px;font-size:11px;color:#888;font-weight:600">${lbl}</span>
+        <div style="flex:1;height:6px;background:#f0ede6;border-radius:99px;overflow:hidden">
+          <div style="height:100%;background:${clr};border-radius:99px;width:${val}%"></div>
+        </div>
+        <span style="width:24px;text-align:right;font-size:13px;font-weight:700;color:#333">${val}</span>
+      </div>`).join('')}
+    </div>
+    <div style="border-top:1px solid #f0ede6;padding-top:14px">
+      <div style="font-size:11px;color:#ccc;text-align:center;margin-bottom:10px">当前合约期 <strong style="color:#999">${recruitContractMonths}个月</strong>，可在招募列表调整</div>
+      ${scoutProfileNote}
+      ${pRateHint}
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="closeArtistProfile()" style="flex:1;justify-content:center">← 返回</button>
+        <button class="btn ${affordable?'btn-primary':''}" onclick="${affordable?'recruitFromProfile()':''}" ${affordable?'':'disabled'} style="flex:2;justify-content:center;padding:9px;font-size:13px">
+          ${affordable?'💼 立即签约 · '+cost+'万':'资金不足 · '+cost+'万'}
+        </button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modal-artist-profile').classList.add('open');
+}
+
+function closeArtistProfile(){
+  document.getElementById('modal-artist-profile').classList.remove('open');
+  profilePoolIdx=-1;
+}
+
+function recruitFromProfile(){
+  if(profilePoolIdx<0) return;
+  const idx=profilePoolIdx;
+  closeArtistProfile();
+  recruit(idx);
+}
+
+function triggerMonthlyEvents(){
+  const results=[];
+  // 颁奖典礼邀请：知名度≥150、6个月冷却、概率随知名度增长
+  if(G.fame>=150 && G.artists.some(a=>a.status==='已出道'||a.status==='工作中')){
+    const cooldown=G.month-(G.lastAwardMonth||0)>=6;
+    const chance=Math.min(0.45,0.15+(G.fame-150)*0.001);
+    if(cooldown&&Math.random()<chance){
+      const eligible=G.artists.filter(a=>a.status==='已出道'||a.status==='工作中');
+      const best=eligible.reduce((b,a)=>{
+        const sa=(a.singing+a.dance+a.acting)/3,sb=(b.singing+b.dance+b.acting)/3;return sa>sb?a:b;
+      });
+      const s=(best.singing+best.dance+best.acting)/3;
+      const trendMult=hasTrend('music_award')?1.8:1;
+      const fameGain=Math.round((100+s*0.8)*trendMult);
+      const moneyGain=Math.round((60+s*0.6)*trendMult);
+      best.fans=Math.round((best.fans||0)+fameGain*0.4);
+      best.pr=Math.min(100,(best.pr||60)+18);
+      G.fame+=15; G.money+=moneyGain; G.lastAwardMonth=G.month;
+      addLog('颁奖典礼出席','plus',moneyGain);
+      results.push({name:'🏆 颁奖典礼邀请',desc:displayName(best)+'受邀出席年度颁奖典礼，荣获大奖！知名度+15 · 收益+'+moneyGain+'万',icon:'🏆',type:'good'});
+    }
+  }
+  if(G.month%3===0){
+    const pool=MONTHLY_EVENTS.industry.filter(e=>!e.check||e.check());
+    if(pool.length){
+      const ev=pool[Math.floor(Math.random()*pool.length)];
+      const extra=ev.effect();
+      results.push({name:ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+    }
+  }
+  if(Math.random()<0.15){
+    const pool=MONTHLY_EVENTS.company.filter(e=>!e.check||e.check());
+    if(pool.length){
+      const ev=pool[Math.floor(Math.random()*pool.length)];
+      const extra=ev.effect();
+      results.push({name:ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+    }
+  }
+  G.artists.forEach(a=>{
+    const _badChance=(hasTrend('scandal_season')?0.20:0.10)*Math.max(0.1,1-(G.buildings.media?.lv||0)*0.08);
+    if(Math.random()<_badChance){
+      const pool=MONTHLY_EVENTS.artist.filter(e=>!e.check||e.check(a));
+      if(pool.length){
+        const ev=pool[Math.floor(Math.random()*pool.length)];
+        const extra=ev.effect(a);
+        results.push({name:displayName(a)+' · '+ev.name,desc:extra||ev.desc,icon:ev.icon,type:ev.type});
+      }
+    }
+  });
+  return results;
+}
+
+function renderLastEvents(){
+  const card=document.getElementById('events-card');
+  const el=document.getElementById('monthly-events-list');
+  if(!G.lastEvents||!G.lastEvents.length){card.style.display='none';return;}
+  card.style.display='';
+  el.innerHTML=G.lastEvents.map((ev,i)=>`
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;${i<G.lastEvents.length-1?'border-bottom:1px solid #f0ede6':''}">
+      <span style="font-size:20px;flex-shrink:0;line-height:1.3">${ev.icon}</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:${ev.type==='good'?'#2e7d32':'#c62828'}">${ev.name}</div>
+        <div style="font-size:12px;color:#666;margin-top:2px">${ev.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function nextMonth(){
+  G.month++;
+  gameDay=1;
+  G.usedEvents=[];
+  G.usedEventArtists={};
+  G.lastEvents=[];
+  pruneScoutedPool();
+  if(!G.businessActions) G.businessActions={month:G.month,count:0,used:{}};
+  if(G.businessActions.month!==G.month) G.businessActions={month:G.month,count:0,used:{}};
+  let income=0,cost=0;
+  updateTrends();
+  const agentSalary=(G.agents||[]).reduce((s,id)=>{const ag=agentData(id);return s+(ag?ag.salary:0);},0);
+  if(agentSalary>0){cost+=agentSalary;addLog('经纪人团队薪资','minus',agentSalary);}
+  // 完成待处理活动
+  const doneEvents=(G.pendingEvents||[]).filter(pe=>pe.completeAt<=G.month);
+  G.pendingEvents=(G.pendingEvents||[]).filter(pe=>pe.completeAt>G.month);
+  doneEvents.forEach(pe=>{
+    const ev=pe.timedEventId?TIMED_EVENTS.find(t=>t.id===pe.timedEventId):EVENTS[pe.evIdx];
+    if(!ev) return;
+    const sel=pe.artistIndices.map(i=>G.artists[i]).filter(Boolean);
+    income+=pe.r.money; G.fame+=pe.r.fame;
+    addLog(pe.name+' 奖励','plus',pe.r.money);
+    const msg=sel.length?ev.apply(sel,pe.r):'';
+    if(!(G.completedEventNames||[]).includes(pe.name))(G.completedEventNames=G.completedEventNames||[]).push(pe.name);
+    G.lastEvents.push({name:pe.name+' 结果出炉',desc:(msg||'活动圆满结束')+' · 知名度+'+pe.r.fame+' 收益+'+pe.r.money+'万',icon:pe.icon,type:'good'});
+  });
+  // 完成待处理建设
+  const doneBuilds=(G.pendingBuilds||[]).filter(p=>p.completeAt<=G.month);
+  G.pendingBuilds=(G.pendingBuilds||[]).filter(p=>p.completeAt>G.month);
+  doneBuilds.forEach(p=>{
+    const b=G.buildings[p.k];
+    if(b) b.lv=p.targetLv;
+    G.lastEvents.push({name:b.name+(p.targetLv===1?' 建造完成':' 升级至 Lv.'+p.targetLv),desc:'设施正式投入使用，效果已生效！',icon:b.icon,type:'good'});
+  });
+  // 完成待处理内容发行
+  const doneReleases=(G.pendingReleases||[]).filter(r=>r.goLiveAt<=G.month);
+  G.pendingReleases=(G.pendingReleases||[]).filter(r=>r.goLiveAt>G.month);
+  doneReleases.forEach(r=>{
+    const {goLiveAt,productionMonths,...release}=r;
+    G.releases.push(release);
+    G.lastEvents.push({name:'「'+r.title+'」正式发布',desc:'内容上线，开始产生收益！',icon:'🎵',type:'good'});
+  });
+  const lv=G.buildings;
+  if(lv.live.lv>0){const g=lv.live.lv*18;income+=g;addLog('直播基地收入','plus',g);}
+  if(lv.merch&&lv.merch.lv>0){const tf=G.artists.reduce((s,a)=>s+(a.fans||0),0);const g=Math.round(tf/100*lv.merch.lv*2);if(g>0){income+=g;addLog('周边商品收益','plus',g);}}
+  if(lv.health&&lv.health.lv>0) G.artists.filter(a=>a.status==='休息中').forEach(a=>{a.pr=Math.min(100,(a.pr||60)+3);});
+  if(lv.makeup?.lv>0) G.artists.forEach(a=>{a.pr=Math.min(100,(a.pr||60)+(lv.makeup.lv));});
+  (G.releases||[]).forEach(r=>{
+    const age=G.month-r.releasedAt;
+    if(r.type==='doc'&&age>=r.duration) return;
+    const mult=age===0?1.5:age===1?1.0:age===2?0.6:0.2;
+    const streamBonus=G.streamingDeal&&(r.type==='single'||r.type==='album')?1.5:1;
+    const trendContent=(hasTrend('streaming_rise')&&(r.type==='single'||r.type==='album')?1.4:1)*(hasTrend('platform_fee')?0.7:1)*(hasAgent('producer')?1.3:1);
+    const g=Math.round(r.baseIncome*mult*streamBonus*trendContent);
+    if(r.type==='doc'){G.fame+=Math.max(1,Math.round(mult*4));}
+    if(g>0){income+=g;addLog(r.title+' 发行收益','plus',g);}
+  });
+  G.artists.forEach(a=>{if(a.releaseBusyUntil&&a.releaseBusyUntil<=G.month) delete a.releaseBusyUntil;});
+  const exhausted=[];
+  G.artists.forEach(a=>{
+    if(a.energy===undefined) a.energy=80;
+    const energyMult=a.energy<=20?0.6:1.0;
+    const eff=(1+(lv.practice.lv*0.2))*(hasTrend('training_boost')?1.4:1)*(hasAgent('trainer')?1.4:1);
+    if(a.status==='训练中'){
+      a.singing=Math.min(99,a.singing+Math.round(Math.random()*3*eff*energyMult));
+      a.dance=Math.min(99,a.dance+Math.round(Math.random()*3*eff*energyMult));
+      a.acting=Math.min(99,a.acting+Math.round(Math.random()*2*eff*energyMult));
+      if(a.singing>75&&a.dance>65){a.status='已出道';toast(displayName(a)+' 训练达标，成功出道！🎉','success');}
+      cost+=5; a.totalCost=(a.totalCost||0)+5;
+      a.energy=Math.max(0,a.energy-staminaDrain(a,true));
+    }
+    if(a.status==='工作中'||a.status==='已出道'){
+      const mvBonus=lv.mv.lv>0?1.3:1;
+      const rehearsalBonus=1+(lv.rehearsal?.lv||0)*0.1+(G.rehearsalBoostMonth===G.month?1.0:0);
+      const wardrobeBonus=1+(lv.wardrobe?.lv||0)*0.1;
+      const pr=a.pr||60;
+      const prMult=pr>=80?1.3:pr>=60?1.0:pr>=40?0.7:0.3;
+      let base=(a.singing+a.dance)/12+Math.random()*8;
+      if(a.direction==='歌手'&&a.singing>=70) base*=1.25;
+      else if(a.direction==='演员'&&a.acting>=70) base*=1.25;
+      else if(a.direction==='全能') base*=1.1;
+      const economyMult=hasTrend('economy_down')?0.75:1;
+      const actingMult=(hasTrend('acting_trend')&&a.acting>=70)?1.4:1;
+      const gross=Math.round(base*mvBonus*rehearsalBonus*prMult*economyMult*actingMult*energyMult);
+      const share=splitArtistIncome(a,gross);
+      income+=share.company; a.fans=Math.round((a.fans||0)+gross/8*wardrobeBonus);
+      if(a.direction==='主持人') G.fame+=2;
+      addLog(displayName(a)+' 演出收入（公司'+share.pct+'%）','plus',share.company);
+      a.energy=Math.max(0,a.energy-staminaDrain(a));
+    }
+    if(a.status==='休息中'){
+      cost+=2; a.totalCost=(a.totalCost||0)+2;
+      a.energy=Math.min(100,a.energy+staminaRecovery(a));
+    }
+    if(a.energy<=0&&a.status!=='休息中'){
+      a.energy=0; a.status='休息中';
+      exhausted.push(a);
+    }
+    const _pr=a.pr||60;
+    if(_pr<40) a._hadCrisis=true;
+    if(_pr<40&&(a.fans||0)>0) a.fans=Math.max(0,Math.round((a.fans||0)*0.95));
+  });
+  G.money+=income-cost;
+  G.monthlyIncome=income; G.monthlyCost=cost;
+  G.fame+=Math.floor(income/25+1);
+  (G.monthlyHistory=G.monthlyHistory||[]).push({month:G.month,income,cost});
+  if(G.monthlyHistory.length>24) G.monthlyHistory.shift();
+  // 限时活动：过期移除
+  const {month:calMonth}=gameCalendar();
+  if(!G.timedEvents) G.timedEvents=[];
+  const expiredTimed=G.timedEvents.filter(te=>te.expiresAt<=G.month);
+  G.timedEvents=G.timedEvents.filter(te=>te.expiresAt>G.month);
+  expiredTimed.forEach(te=>{
+    const ev=TIMED_EVENTS.find(t=>t.id===te.id);
+    if(ev) G.lastEvents.push({name:'⚡ '+ev.name+' 机会错过',desc:'限时活动窗口期已过，此次机会已消失',icon:ev.icon,type:'bad'});
+  });
+  // 限时活动：随机触发新事件（最多同时2个，每个id不重复触发）
+  const activeTimedIds=new Set(G.timedEvents.map(te=>te.id));
+  const pendingTimedIds=new Set((G.pendingEvents||[]).filter(pe=>pe.timedEventId).map(pe=>pe.timedEventId));
+  if(G.timedEvents.length<2){
+    const candidates=TIMED_EVENTS.filter(ev=>{
+      if(activeTimedIds.has(ev.id)||pendingTimedIds.has(ev.id)) return false;
+      if(ev.yearEnd&&(calMonth<11)) return false;
+      return ev.check();
+    });
+    for(const ev of candidates){
+      if(G.timedEvents.length>=2) break;
+      if(Math.random()<ev.spawnChance){
+        G.timedEvents.push({id:ev.id,spawnedAt:G.month,expiresAt:G.month+2});
+        G.lastEvents.push({name:'⚡ 新限时机会：'+ev.name,desc:ev.desc+' · 请在2个月内参加，机会稍纵即逝！',icon:ev.icon,type:'good'});
+      }
+    }
+  }
+  G.lastEvents.push(...triggerMonthlyEvents());
+  exhausted.forEach(a=>G.lastEvents.push({name:displayName(a)+' · 精力耗尽',desc:'长期高强度工作导致精力耗尽，已被迫休息！记得让艺人定期休整。',icon:'😮‍💨',type:'bad'}));
+  if(G.month%3===0) doRivalAction();
+  if(hasAgent('pr')&&G.artists.length){
+    const worst=G.artists.reduce((b,a)=>((a.pr||60)<(b.pr||60)?a:b));
+    worst.pr=Math.min(100,(worst.pr||60)+10);
+  }
+  G.artists.forEach(a=>{
+    if(!a.contractEnd) a.contractEnd=G.month+24;
+    if(a.contractEnd===G.month&&!a.wantLeave){
+      G.lastEvents.push({name:displayName(a)+' 合同到期',desc:'合同已到期！请前往「艺人管理→合同」及时续签，否则艺人将流失',icon:'📋',type:'bad'});
+    }
+    if(a.contractEnd-G.month===2&&!a.wantLeave){
+      G.lastEvents.push({name:displayName(a)+' 合同即将到期',desc:'合同还剩2个月，建议尽快前往合同页面谈判续签',icon:'⏰',type:'bad'});
+    }
+  });
+  // 处理拒绝续签离开的艺人
+  const leavingNow=G.artists.filter(a=>a.wantLeave&&(a.leaveDeadline||0)<=G.month);
+  leavingNow.forEach(a=>{
+    G.lastEvents.push({name:displayName(a)+' 已离开公司',desc:'因续签谈判破裂，'+displayName(a)+'正式离开公司。',icon:'💔',type:'bad'});
+    pushFeed('💔',displayName(a)+' 正式离开了公司','bad');
+  });
+  if(leavingNow.length) G.artists=G.artists.filter(a=>!(a.wantLeave&&(a.leaveDeadline||0)<=G.month));
+  updateStats();renderArtistList();updateOverview();updateTips();updateSidebar();renderEvents();maybeRefreshArtistScene();saveGame();checkAchievements();
+  startDayTick();
+  const{year,month}=gameCalendar();
+  const evMsg=G.lastEvents.length?' · '+G.lastEvents.length+'件事件':'';
+  // 精力预警推送
+  G.artists.forEach(a=>{
+    const e=a.energy??80;
+    if(a.status!=='休息中'&&e<=30)
+      pushFeed('⚡',displayName(a)+' 精力仅剩 '+e+'，建议安排休息','bad');
+  });
+  // 推送到动态流（逆序插入使最终月度汇总显示在最顶）
+  [...G.lastEvents].reverse().forEach(ev=>pushFeed(ev.icon,ev.name,ev.type==='bad'?'bad':ev.type==='good'?'good':'info'));
+  const _net=income-cost;
+  pushFeed('📅','收入+'+income+'万  支出-'+cost+'万  净'+(_net>=0?'+':'')+_net+'万',_net>=0?'good':'bad');
+  toast('第'+year+'年'+month+'月结算 ▸ 收入+'+income+'万  支出-'+cost+'万'+evMsg,'success');
+}
+
+let gameDay=1, _dayTick=null;
+
+function gameCalendar(){
+  const total=G.month-1;
+  return{year:Math.floor(total/12)+1,month:(total%12)+1};
+}
+function daysInGameMonth(){
+  const{month}=gameCalendar();
+  return[31,28,31,30,31,30,31,31,30,31,30,31][month-1];
+}
+function updateDateDisplay(){
+  const{year,month}=gameCalendar();
+  const el=document.getElementById('game-date');
+  if(el) el.textContent='第'+year+'年'+month+'月'+gameDay+'日';
+}
+function startDayTick(){
+  if(_dayTick) clearInterval(_dayTick);
+  const max=daysInGameMonth();
+  _dayTick=setInterval(()=>{
+    if(gameDay<max){gameDay++;updateDateDisplay();}
+    else{clearInterval(_dayTick);_dayTick=null;nextMonth();}
+  },1500);
+}
+
+function updateStats(){
+  document.getElementById('money').textContent=G.money;
+  document.getElementById('fame').textContent=G.fame;
+  updateDateDisplay();
+}
+
+const BUSINESS_TYPES={
+  signing:{
+    id:'signing',
+    name:'签售会',
+    icon:'💝',
+    desc:'租赁商场、书店或展馆场地，提升粉丝与口碑。',
+    baseCost:35,
+    baseReward:28,
+    baseFans:8,
+    basePR:10,
+    energy:18,
+    require(){return G.artists.some(a=>a.status==='工作中'||a.status==='已出道');},
+    unlock(){return G.artists.length>=1;},
+    hint:'需要至少一名出道或工作中的艺人',
+  },
+  endorsement:{
+    id:'endorsement',
+    name:'品牌代言',
+    icon:'🛍️',
+    desc:'对接外部品牌合作，收益高但更看口碑与粉丝匹配。',
+    baseCost:20,
+    baseReward:45,
+    baseFans:4,
+    basePR:6,
+    energy:14,
+    require(){return G.artists.some(a=>(a.fans||0)>=20&&(a.pr||60)>=50);},
+    unlock(){return G.artists.length>=1;},
+    hint:'至少有一名粉丝和口碑都达标的艺人',
+  },
+  booking:{
+    id:'booking',
+    name:'商业演出',
+    icon:'🎤',
+    desc:'接外部商演和城市活动，稳定赚钱，消耗精力较多。',
+    baseCost:0,
+    baseReward:38,
+    baseFans:3,
+    basePR:3,
+    energy:22,
+    require(){return G.artists.some(a=>a.status==='工作中'||a.status==='已出道');},
+    unlock(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中');},
+    hint:'第一位艺人出道后开放',
+  }
+};
+
+function businessStatus(){
+  const used=(G.businessActions&&G.businessActions.used)||{};
+  return Object.keys(used).length;
+}
+
+function businessEligibleArtists(type){
+  return G.artists.filter(a=>{
+    if(type==='endorsement') return (a.fans||0)>=20&&(a.pr||60)>=50&&(a.status==='工作中'||a.status==='已出道');
+    return a.status==='工作中'||a.status==='已出道';
+  });
+}
+
+function renderBusiness(){
+  const list=document.getElementById('business-list');
+  const ready=document.getElementById('business-ready');
+  const used=document.getElementById('business-used');
+  const count=document.getElementById('business-count');
+  if(!list) return;
+  if(!G.businessActions) G.businessActions={month:0,count:0,used:{}};
+  if(!G.businessActions.used) G.businessActions.used={};
+  if(G.businessActions.month!==G.month){
+    G.businessActions.month=G.month;
+    G.businessActions.count=0;
+    G.businessActions.used={};
+  }
+  const unlocked=Object.values(BUSINESS_TYPES);
+  const readyCount=G.artists.filter(a=>a.status==='工作中'||a.status==='已出道').length;
+  if(ready) ready.textContent=readyCount;
+  if(used) used.textContent=businessStatus();
+  if(count) count.textContent=unlocked.length;
+  const monthUsed=businessStatus();
+  const monthLabel='本月已安排 '+monthUsed+' 单';
+  const cards=[
+    {
+      key:'signing',
+      extra:'适合在热度高的月份冲粉丝。',
+      scale:'粉丝 +'+BUSINESS_TYPES.signing.baseFans+'万，口碑 +'+BUSINESS_TYPES.signing.basePR,
+    },
+    {
+      key:'endorsement',
+      extra:'口碑和粉丝越高，报价越高。',
+      scale:'收益高 · 风险低则更稳定',
+    },
+    {
+      key:'booking',
+      extra:'适合稳定期持续接单。',
+      scale:'收益 +'+BUSINESS_TYPES.booking.baseReward+'万起',
+    },
+  ];
+  list.innerHTML=cards.map(card=>{
+    const cfg=BUSINESS_TYPES[card.key];
+    const locked=!cfg.unlock();
+    const eligible=businessEligibleArtists(card.key);
+    const options=eligible.map((a,i)=>`<option value="${G.artists.indexOf(a)}">${displayName(a)} · ${a.fans||0}万粉 · 口碑${a.pr||60}</option>`).join('');
+    const selectHtml=eligible.length?`<select id="biz-select-${card.key}" style="width:100%;padding:8px 10px;border:1px solid #d0cec7;border-radius:8px;background:#fff;font-size:12px">${options}</select>`:'<div style="font-size:12px;color:#999;padding:4px 0">暂无合适艺人</div>';
+    return `<div class="business-card ${locked?'locked':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <div style="width:40px;height:40px;border-radius:10px;background:${locked?'#f3f4f6':'#fef3c7'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${cfg.icon}</div>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:600">${cfg.name}</div>
+            <div style="font-size:11px;color:#666;margin-top:2px">${cfg.desc}</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:${locked?'#c29b00':'#999'};white-space:nowrap">${locked?'未开放':'已开放'}</div>
+      </div>
+      <div style="font-size:11px;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;padding:7px 9px;border-radius:8px">${card.scale}</div>
+      <div style="font-size:11px;color:#999">${cfg.hint}</div>
+      <div style="font-size:11px;color:#666">${card.extra}</div>
+      <div style="font-size:11px;color:#999">${monthLabel}</div>
+      <div>${selectHtml}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="runBusiness('${card.key}')" ${locked||!eligible.length?'disabled':''}>执行业务</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function runBusiness(key){
+  const cfg=BUSINESS_TYPES[key];
+  if(!cfg) return;
+  if(!cfg.unlock()){toast('该业务尚未开放','error');return;}
+  if(!G.businessActions||G.businessActions.month!==G.month){G.businessActions={month:G.month,count:0,used:{}};}
+  if(!G.businessActions.used) G.businessActions.used={};
+  if(G.businessActions.used[key]===G.month){toast('该业务本月已安排过了','error');return;}
+  if(G.businessActions.count>=3){toast('本月业务次数已满','error');return;}
+  const eligible=businessEligibleArtists(key);
+  if(!eligible.length){toast('没有合适的艺人可安排','error');return;}
+  const select=document.getElementById('biz-select-'+key);
+  const idx=select?parseInt(select.value,10):G.artists.indexOf(eligible[0]);
+  const a=G.artists[idx];
+  if(!a) return;
+  const pr=(a.pr||60);
+  const fans=(a.fans||0);
+  let reward=cfg.baseReward+Math.round(fans*0.25)+(pr>=80?20:pr>=60?10:0);
+  let fansGain=cfg.baseFans+Math.round(fans*0.04);
+  let prGain=cfg.basePR+Math.max(0,Math.floor((pr-50)/10));
+  if(key==='endorsement'){
+    reward+=Math.round((fans/5)+(pr>=80?15:0));
+    if(pr<60) reward=Math.round(reward*0.8);
+  }
+  if(key==='signing'){
+    reward=Math.round(reward*0.8);
+    fansGain+=4;
+  }
+  if(key==='booking'){
+    reward+=Math.round((a.singing+a.dance+a.acting)/6);
+  }
+  if(G.money<cfg.baseCost){toast('资金不足 '+cfg.baseCost+'万','error');return;}
+  if(cfg.baseCost>0){
+    G.money-=cfg.baseCost;
+    addLog(cfg.name+' 场地/合作费','minus',cfg.baseCost);
+  }
+  G.money+=reward;
+  G.fame+=Math.max(1,Math.floor(reward/20));
+  a.fans=Math.round((a.fans||0)+fansGain);
+  a.pr=Math.min(100,(a.pr||60)+prGain);
+  a.energy=Math.max(0,(a.energy??80)-cfg.energy);
+  G.businessActions.count++;
+  G.businessActions.used[key]=G.month;
+  addLog(displayName(a)+' · '+cfg.name,'plus',reward);
+  pushFeed(cfg.icon,'完成'+cfg.name+'：'+displayName(a)+' 收益+'+reward+'万','good');
+  saveGame();
+  renderBusiness();
+  renderArtistList();
+  updateStats();
+  updateOverview();
+  updateSidebar();
+  toast(cfg.name+' 执行成功，收益+'+reward+'万','success');
+}
+
+const BUILDING_UNLOCK={
+  merch:   { hint:'旗下总粉丝达到10万后解锁', check(){ return G.artists.reduce((s,a)=>s+(a.fans||0),0)>=10; } },
+  mv:      { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  media:   { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  health:    { hint:'公司知名度达到50后解锁',    check(){ return G.fame>=50; } },
+  legal:     { hint:'公司知名度达到50后解锁',    check(){ return G.fame>=50; } },
+  rehearsal: { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  wardrobe:  { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+  makeup:    { hint:'第一位艺人出道后解锁',      check(){ return G.artists.some(a=>a.status==='已出道'||a.status==='工作中'); } },
+};
+
+const TAB_UNLOCK=[
+  {id:'content',      label:'内容发行',   hint:'签约第一位练习生后解锁',
+   check(){return G.artists.length>=1||G.month>=3;}},
+  {id:'finance',      label:'财务报表',   hint:'签约第一位练习生后解锁',
+   check(){return G.artists.length>=1||G.month>=3;}},
+  {id:'events',       label:'活动赛事',   hint:'签约第一位练习生后解锁',
+   check(){return G.artists.length>=1||G.month>=3;}},
+  {id:'market',       label:'市场动态',   hint:'第一位艺人出道后解锁',
+   check(){return G.artists.some(a=>a.status==='已出道'||a.status==='工作中')||G.month>=6;}},
+  {id:'achievements', label:'成就中心',   hint:'解锁第一个成就后开放',
+   check(){return (G.achievements||[]).length>=1||G.month>=3;}},
+  {id:'agents',       label:'经纪人团队', hint:'知名度达到80后解锁',
+   check(){return G.fame>=80||G.month>=9;}},
+  {id:'rivals',       label:'竞争对手',   hint:'知名度达到150后解锁',
+   check(){return G.fame>=150||G.month>=12;}},
+];
+let _initDone=false;
+
+function updateNavUnlocks(){
+  if(!G.unlockedTabs) G.unlockedTabs=[];
+  TAB_UNLOCK.forEach(t=>{
+    const btn=document.getElementById('nav-'+t.id);
+    if(!btn) return;
+    const ok=t.check();
+    const tracked=G.unlockedTabs.includes(t.id);
+    if(ok&&!tracked){
+      G.unlockedTabs.push(t.id);
+      if(_initDone) toast('🔓 '+t.label+' 已解锁！','success');
+    }
+    btn.classList.toggle('locked',!ok);
+  });
+}
+
+function updateSidebar(){
+  document.getElementById('artist-count').textContent=G.artists.length;
+  const lv=G.fame<200?'⭐ 初创公司':G.fame<800?'⭐⭐ 新兴公司':G.fame<2500?'⭐⭐⭐ 知名公司':G.fame<8000?'⭐⭐⭐⭐ 顶级公司':'🌟 娱乐帝国';
+  document.getElementById('company-level').textContent=lv;
+  const lowEnergy=G.artists.filter(a=>a.status!=='休息中'&&(a.energy??80)<=30);
+  const lowEnergyNames=lowEnergy.map(a=>displayName(a));
+  const badge=document.getElementById('artist-energy-badge');
+  if(lowEnergy.length){
+    badge.textContent=lowEnergy.length;
+    badge.title='需休息：'+lowEnergyNames.join('、');
+    badge.style.display='';
+  } else {
+    badge.style.display='none';
+    badge.title='';
+  }
+  const expiringContracts=G.artists.filter(a=>a.wantLeave||((a.contractEnd||G.month+24)-G.month)<=6);
+  const cbadge=document.getElementById('artist-contract-badge');
+  if(expiringContracts.length){cbadge.textContent=expiringContracts.length;cbadge.style.display='';}
+  else cbadge.style.display='none';
+  const tb=document.getElementById('tab-badge-train');
+  if(tb){
+    if(lowEnergy.length){
+      tb.textContent=lowEnergy.length;
+      tb.title='需休息：'+lowEnergyNames.join('、');
+      tb.style.display='';
+    } else {
+      tb.style.display='none';
+      tb.title='';
+    }
+  }
+  const tcb=document.getElementById('tab-badge-contracts');
+  if(tcb){if(expiringContracts.length){tcb.textContent=expiringContracts.length;tcb.style.display='';}else tcb.style.display='none';}
+  updateNavUnlocks();
+}
+
+function updateOverview(){
+  document.getElementById('ov-income').textContent=G.monthlyIncome;
+  document.getElementById('ov-artists').textContent=G.artists.length;
+  document.getElementById('ov-fans').textContent=G.artists.reduce((s,a)=>s+(a.fans||0),0);
+  document.getElementById('ov-fame').textContent=G.fame;
+  const fac=document.getElementById('facility-status');
+  fac.innerHTML=Object.values(G.buildings).map(b=>`
+    <div class="progress-row">
+      <span class="progress-label" style="width:90px">${b.icon} ${b.name}</span>
+      <div class="bar-bg"><div class="bar-fill bar-blue" style="width:${(b.lv/b.maxLv)*100}%"></div></div>
+      <span class="bar-val" style="width:40px;text-align:right">${b.lv===0?'未建':'Lv.'+b.lv+'/'+b.maxLv}</span>
+    </div>
+  `).join('');
+  updateTips();
+  renderLastEvents();
+}
+
+function updateTips(){
+  const tips=[];
+  if(G.buildings.live.lv===0) tips.push('💡 建议优先建造直播基地，每月稳定收入');
+  if(G.artists.length===0) tips.push('💡 前往艺人管理招募第一位练习生');
+  if(G.artists.some(a=>a.status==='训练中')) tips.push('⏳ 有练习生训练中，等待属性达标后自动出道');
+  if(G.artists.some(a=>a.status==='已出道')) tips.push('✅ 有艺人已出道！前往训练安排让其「接工作」赚钱');
+  if(G.fame>=80&&G.artists.length>=2) tips.push('🎪 条件满足！可以举办演唱会巡演啦');
+  if(!tips.length) tips.push('📈 公司运转良好，持续扩大规模冲击娱乐帝国！');
+  document.getElementById('monthly-tips').innerHTML=tips.join('<br>');
+}
+
+function renderFinance(){
+  document.getElementById('fin-money').textContent=G.money;
+  document.getElementById('fin-income').textContent=G.monthlyIncome;
+  document.getElementById('fin-cost').textContent=G.monthlyCost;
+  const netEl=document.getElementById('fin-net');
+  netEl.textContent=G.monthlyIncome-G.monthlyCost;
+  netEl.style.color=G.monthlyIncome-G.monthlyCost>=0?'#2e7d32':'#c62828';
+
+  // 年度统计
+  const curYear=Math.ceil(G.month/12)||1;
+  const yearStart=(curYear-1)*12+1;
+  document.getElementById('fin-year-label').textContent=curYear;
+  const yh=(G.monthlyHistory||[]).filter(h=>h.month>=yearStart);
+  const yInc=yh.reduce((s,h)=>s+h.income,0);
+  const yCost=yh.reduce((s,h)=>s+h.cost,0);
+  document.getElementById('fin-year-income').textContent=yInc;
+  document.getElementById('fin-year-cost').textContent=yCost;
+  const ynEl=document.getElementById('fin-year-net');
+  ynEl.textContent=yInc-yCost;
+  ynEl.style.color=yInc-yCost>=0?'#2e7d32':'#c62828';
+
+
+
+  // 艺人收支明细
+  const artEl=document.getElementById('artist-finance-list');
+  if(!G.artists.length){
+    artEl.innerHTML='<div style="color:#999;font-size:13px">暂无艺人</div>';
+  } else {
+    const sorted=[...G.artists].sort((a,b)=>((b.totalIncome||0)-(b.totalCost||0))-((a.totalIncome||0)-(a.totalCost||0)));
+    artEl.innerHTML=sorted.map((a,i)=>{
+      const inc=a.totalIncome||0;
+      const gross=a.totalGrossIncome||inc;
+      const artistShare=a.totalArtistShare||0;
+      const cost=a.totalCost||0;
+      const net=inc-cost;
+      const maxBar=Math.max(inc,cost,1);
+      return `<div style="padding:12px 0;${i<sorted.length-1?'border-bottom:1px solid #f0ede6':''}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div class="avatar" style="background:${a.color};color:${a.tc};width:34px;height:34px;font-size:12px">${a.abbr}</div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${displayName(a)}</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:3px">
+              <span class="status-badge ${statusCls(a.status)}" style="font-size:10px">${a.status}</span>
+              <span style="font-size:10px;color:#3730a3;background:#eef2ff;border-radius:99px;padding:2px 7px;font-weight:600">公司${getCompanyShare(a)}%</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:${net>=0?'#2e7d32':'#c62828'}">${net>=0?'+':''}${net}万</div>
+            <div style="font-size:10px;color:#999">净贡献</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:10px;color:#2e7d32;font-weight:500;margin-bottom:3px">公司累计收入 ${inc}万</div>
+            <div style="height:5px;background:#f0ede6;border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:#16a34a;border-radius:99px;width:${Math.round(inc/maxBar*100)}%"></div>
+            </div>
+            <div style="font-size:9px;color:#999;margin-top:3px">总流水 ${gross}万 · 艺人分成 ${artistShare}万</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#c62828;font-weight:500;margin-bottom:3px">累计成本 ${cost}万</div>
+            <div style="height:5px;background:#f0ede6;border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:#dc2626;border-radius:99px;width:${Math.round(cost/maxBar*100)}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 收支记录
+  const log=document.getElementById('income-log');
+  if(!G.log.length){log.innerHTML='<div style="font-size:13px;color:#999">暂无记录</div>';return;}
+  log.innerHTML=G.log.slice().reverse().map(l=>`
+    <div class="log-item">
+      <span style="color:#666">${l.desc}</span>
+      <span class="${l.type==='plus'?'log-plus':'log-minus'}">${l.type==='plus'?'+':'-'}${l.val}万</span>
+    </div>
+  `).join('');
+}
+
+function addLog(desc,type,val){
+  G.log.push({desc,type,val:Math.round(val)});
+  if(G.log.length>50) G.log.shift();
+}
+
+function toast(msg,type='success'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast toast-'+type+' show';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+document.getElementById('modal-recruit').addEventListener('click',function(e){if(e.target===this)closeRecruit();});
+document.getElementById('modal-artist-profile').addEventListener('click',function(e){if(e.target===this)closeArtistProfile();});
+document.getElementById('modal-renew-contract').addEventListener('click',function(e){if(e.target===this)closeRenewModal();});
+document.getElementById('modal-alias').addEventListener('click',function(e){if(e.target===this)closeAliasEdit();});
+document.getElementById('modal-direction').addEventListener('click',function(e){if(e.target===this)closeDirectionSelect();});
+document.getElementById('modal-event').addEventListener('click',function(e){if(e.target===this)closeEventModal();});
+document.getElementById('alias-input').addEventListener('keydown',function(e){if(e.key==='Enter')saveAlias();});
+
+init();
