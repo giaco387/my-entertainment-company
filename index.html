@@ -11,7 +11,7 @@
 <div class="topbar">
   <div class="topbar-title">🎬 我的娱乐公司</div>
   <div class="stats">
-    <div class="stat">💰 <strong id="money">1000</strong> 万</div>
+    <div class="stat">💰 <strong id="money">800</strong> 万</div>
     <div class="stat">⭐ 知名度 <strong id="fame">12</strong></div>
     <div class="stat">📅 <strong id="game-date">第1年1月1日</strong></div>
     <button class="btn-next" style="background:#fff;color:#1a1a1a;border:1px solid #d0cec7;margin-right:6px" onclick="newGame()">↺ 新游戏</button>
@@ -46,18 +46,46 @@
     <div class="section active" id="section-overview">
       <div class="section-title">公司总览</div>
       <div class="cards-grid">
-        <div class="metric-card"><div class="metric-label">本月收入</div><div class="metric-val" id="ov-income">0</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">资金</div><div class="metric-val" id="ov-money">800</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">月净利润</div><div class="metric-val" id="ov-net">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">在职艺人</div><div class="metric-val" id="ov-artists">0</div><div class="metric-sub">人</div></div>
         <div class="metric-card"><div class="metric-label">粉丝总量</div><div class="metric-val" id="ov-fans">0</div><div class="metric-sub">万人</div></div>
-        <div class="metric-card"><div class="metric-label">公司知名度</div><div class="metric-val" id="ov-fame">12</div><div class="metric-sub">点</div></div>
+        <div class="metric-card"><div class="metric-label">知名度</div><div class="metric-val" id="ov-fame">12</div><div class="metric-sub">点</div></div>
+        <div class="metric-card"><div class="metric-label">风险提醒</div><div class="metric-val" id="ov-risk">0</div><div class="metric-sub">项</div></div>
+        <div style="display:none"><span id="ov-income">0</span></div>
       </div>
-      <div class="tip-box" id="monthly-tips">💡 欢迎来到我的娱乐公司！建议先建造直播基地获取稳定收入，再招募练习生开始培养艺人之路！</div>
+      <div class="overview-grid">
+        <div class="card overview-card-main">
+          <div class="card-head"><span class="card-title">本月重点</span></div>
+          <div id="monthly-tips" class="overview-action-list">欢迎来到我的娱乐公司！建议先建造直播间获取稳定收入，再招募练习生开始培养艺人之路！</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">艺人状态</span></div>
+          <div id="artist-status-overview"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">公司徽章</span></div>
+          <div id="company-badges-overview"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">长期目标</span></div>
+          <div id="long-goals-overview"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">待处理事项</span></div>
+          <div id="todo-overview"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">经营趋势</span></div>
+          <div id="trend-overview"></div>
+        </div>
+      </div>
       <div class="card" id="events-card" style="display:none">
-        <div class="card-head"><span class="card-title">📌 本月事件</span></div>
+        <div class="card-head"><span class="card-title">📌 本月事件</span><button class="btn btn-sm" onclick="showMonthlyReport()">查看月报</button></div>
         <div id="monthly-events-list"></div>
       </div>
       <div class="card">
-        <div class="card-head"><span class="card-title">设施状态</span></div>
+        <div class="card-head"><span class="card-title">设施摘要</span></div>
         <div id="facility-status"></div>
       </div>
     </div>
@@ -115,6 +143,7 @@
     <!-- 建设 -->
     <div class="section" id="section-buildings">
       <div class="section-title">设施建设</div>
+      <div id="building-route-panel"></div>
       <div class="build-grid" id="build-grid"></div>
     </div>
 
@@ -141,7 +170,7 @@
       <div class="section-title">财务报表</div>
       <div style="font-size:11px;font-weight:600;color:#999;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">本月</div>
       <div class="cards-grid">
-        <div class="metric-card"><div class="metric-label">总资金</div><div class="metric-val" id="fin-money">1000</div><div class="metric-sub">万元</div></div>
+        <div class="metric-card"><div class="metric-label">总资金</div><div class="metric-val" id="fin-money">800</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月收入</div><div class="metric-val" id="fin-income">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月支出</div><div class="metric-val" id="fin-cost">0</div><div class="metric-sub">万元</div></div>
         <div class="metric-card"><div class="metric-label">月净利润</div><div class="metric-val" id="fin-net">0</div><div class="metric-sub">万元</div></div>
@@ -244,7 +273,7 @@
       <div class="modal-title" style="margin:0">招募练习生</div>
       <button class="btn btn-sm" onclick="closeRecruit()">✕</button>
     </div>
-    <div style="font-size:12px;color:#999;margin-bottom:12px">当前资金：<strong id="modal-money" style="color:#1a1a1a">1000</strong> 万</div>
+    <div style="font-size:12px;color:#999;margin-bottom:12px">当前资金：<strong id="modal-money" style="color:#1a1a1a">800</strong> 万</div>
     <div style="margin-bottom:14px;padding:12px;border:1px solid #e8e5de;border-radius:12px;background:#fbfaf7">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:9px">
         <div>
@@ -341,6 +370,11 @@
       <button class="btn btn-sm btn-primary" id="event-confirm-btn" onclick="confirmEventWithArtists()" disabled>确认参加</button>
     </div>
   </div>
+</div>
+
+<!-- 月度简报弹窗 -->
+<div class="modal-bg" id="modal-monthly-report">
+  <div id="monthly-report-content" class="monthly-report-modal"></div>
 </div>
 
 <div class="toast" id="toast"></div>

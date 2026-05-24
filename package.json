@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "check": "node check.js"
+    "check": "node check.js",
+    "balance": "node balance_check.js"
   }
 }
