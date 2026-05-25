@@ -120,6 +120,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .report-goal-bar div{height:100%;background:#2563eb;border-radius:99px}
 .report-goal-reward{font-size:10px;font-weight:800;color:#1d4ed8;margin-top:5px}
 .report-next{border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;padding:10px 12px;font-size:12px;color:#1e3a8a;line-height:1.6}
+.ending-report-modal{background:#fff;border-radius:16px;width:720px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.ending-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:20px;border-bottom:1px solid #e8e5de}
+.ending-title{font-size:18px;font-weight:800;color:#1a1a1a}
+.ending-sub{font-size:12px;color:#777;margin-top:4px}
+.ending-body{padding:18px 20px}
+.ending-grade{display:grid;grid-template-columns:100px 1fr;gap:14px;border:1px solid;border-radius:12px;padding:15px;margin-bottom:14px}
+.ending-rank{width:76px;height:76px;border-radius:14px;background:rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:900}
+.ending-grade-title{font-size:18px;font-weight:900;margin-bottom:5px}
+.ending-grade-desc{font-size:12px;line-height:1.6;color:#555}
+.ending-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.ending-kpi{border:1px solid #e8e5de;border-radius:10px;padding:10px;background:#fafaf9}
+.ending-kpi-label{font-size:10px;color:#888;margin-bottom:4px}
+.ending-kpi-val{font-size:18px;font-weight:800;color:#1a1a1a}
+.ending-list{display:grid;gap:7px;margin-bottom:14px}
+.ending-list-row{display:flex;gap:8px;align-items:flex-start;border:1px solid #f0ede6;border-radius:9px;padding:8px 10px;font-size:12px;color:#555;line-height:1.5}
+.ending-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0ede6}
+.crisis-report-modal .ending-grade{border-color:#fecaca;background:#fef2f2}
+.crisis-report-modal .ending-rank{color:#991b1b}
 .recruit-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #e8e5de;border-radius:10px;cursor:pointer;transition:all 0.15s;margin-bottom:8px}
 .recruit-item:hover{background:#f5f4f0;border-color:#ccc}
 .recruit-stats{flex:1}
@@ -193,6 +211,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .starter-goal small{display:block;color:#999;font-size:10px;margin-top:1px}
 .starter-goal.done small{color:#4d7c0f}
 .company-stage{margin-top:10px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;padding:11px}
+.ending-overview{margin-top:10px;border:1px solid #fde68a;border-radius:10px;background:#fffbeb;padding:11px}
+.ending-overview.danger{border-color:#fecaca;background:#fef2f2}
+.ending-overview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
 .stage-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
 .stage-eyebrow{font-size:10px;font-weight:800;color:#2563eb;letter-spacing:.4px}
 .stage-title{font-size:14px;font-weight:800;color:#172554;margin-top:1px}
@@ -268,6 +289,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .fi-body{font-size:11px;color:#444;line-height:1.6}
 @media(max-width:600px){
   .cards-grid{grid-template-columns:repeat(2,1fr)}
+  .ending-grade{grid-template-columns:1fr}
+  .ending-kpis{grid-template-columns:repeat(2,1fr)}
+  .ending-actions{flex-direction:column}
   .overview-grid{grid-template-columns:1fr}
   .overview-card-main{grid-row:auto}
   .action-goal-card{flex-direction:column}
