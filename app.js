@@ -3696,18 +3696,171 @@ function renderLongGoals(){
   }).join('');
 }
 
+function actionTarget(section,tab){
+  return "goTo('"+section+"'"+(tab?",'"+tab+"'":"")+")";
+}
+
+function actionCard(id,kind,icon,title,desc,target,cta){
+  return {id,kind,icon,title,desc,target,cta:cta||'去处理'};
+}
+
+function isSameAction(a,b){
+  return a&&b&&(a.id===b.id||a.title===b.title);
+}
+
+function firstAvailableEvent(){
+  const timed=(G.timedEvents||[]).map(te=>TIMED_EVENTS.find(ev=>ev.id===te.id)).filter(ev=>ev&&ev.check());
+  if(timed.length) return timed[0];
+  return EVENTS.find(ev=>ev.check());
+}
+
+function bestContentTypeForRecommendation(){
+  if(!G.artists.some(a=>a.status==='已出道'||a.status==='工作中')) return null;
+  const pendingBusy=(G.pendingReleases||[]).length>=2;
+  if(pendingBusy) return null;
+  return [...CONTENT_TYPES].reverse().find(t=>t.check&&t.check()&&G.money>=t.cost)||null;
+}
+
+function getOverviewActionPlan(){
+  const risks=[];
+  const actions=[];
+  const opportunities=[];
+  const lowEnergy=G.artists.filter(a=>a.status!=='休息中'&&(a.energy??80)<=30).sort((a,b)=>(a.energy??80)-(b.energy??80));
+  const lowPr=G.artists.filter(a=>(a.pr||60)<45).sort((a,b)=>(a.pr||60)-(b.pr||60));
+  const expiring=G.artists.filter(a=>a.wantLeave||((a.contractEnd||G.month+24)-G.month)<=3).sort((a,b)=>((a.contractEnd||G.month+24)-G.month)-((b.contractEnd||G.month+24)-G.month));
+
+  lowEnergy.slice(0,2).forEach(a=>risks.push(actionCard(
+    'energy-'+a.name,'risk','⚡',
+    displayName(a)+' 需要休息',
+    '精力只剩 '+(a.energy??80)+'，继续训练或工作容易被迫停工。',
+    actionTarget('artists','train'),'安排状态'
+  )));
+  lowPr.slice(0,2).forEach(a=>risks.push(actionCard(
+    'pr-'+a.name,'risk','📢',
+    displayName(a)+' 口碑偏低',
+    '当前口碑 '+(a.pr||60)+'，收益会打折，低于 40 还会持续掉粉。',
+    actionTarget('artists','pr'),'去公关'
+  )));
+  expiring.slice(0,2).forEach(a=>{
+    const remain=(a.contractEnd||G.month+24)-G.month;
+    risks.push(actionCard(
+      'contract-'+a.name,'risk','📋',
+      displayName(a)+(a.wantLeave?' 有离队风险':' 合同临近到期'),
+      a.wantLeave?'续签谈判破裂，仍可尝试紧急挽留。':'还剩 '+remain+' 个月，拖久后续签成本和流失风险都会上升。',
+      actionTarget('artists','contracts'),'处理合同'
+    ));
+  });
+  if(G.money<100) risks.push(actionCard(
+    'cash-low','risk','💰',
+    '资金安全线偏低',
+    '当前资金低于 100 万，优先安排低成本收益来源，避免同时开太多建设。',
+    actionTarget('business'),'找收入'
+  ));
+
+  if(!G.artists.length) actions.push(actionCard(
+    'recruit-first','stage','👤',
+    '签约第一位练习生',
+    '没有艺人时，训练、活动和内容发行都无法真正启动。',
+    actionTarget('artists'),'去招募'
+  ));
+  if(G.buildings.live.lv===0) actions.push(actionCard(
+    'build-live','stage','📺',
+    '建造直播间',
+    '直播间提供每月固定收入，能托住早期现金流。',
+    actionTarget('buildings'),'去建设'
+  ));
+  const trainee=G.artists.find(a=>a.status==='训练中');
+  if(trainee){
+    const singingGap=Math.max(0,76-trainee.singing);
+    const danceGap=Math.max(0,66-trainee.dance);
+    actions.push(actionCard(
+      'train-'+trainee.name,'stage','🎤',
+      '推进 '+displayName(trainee)+' 出道',
+      singingGap||danceGap?'距离出道还差唱功 '+singingGap+'、舞蹈 '+danceGap+'。':'已达到出道线，推进月份即可完成出道结算。',
+      actionTarget('artists','train'),'看训练'
+    ));
+  }
+  const debut=G.artists.find(a=>a.status==='已出道');
+  if(debut) actions.push(actionCard(
+    'start-work-'+debut.name,'stage','💼',
+    '安排 '+displayName(debut)+' 开始工作',
+    '已出道但还未进入工作状态，先让艺人产生稳定收入。',
+    actionTarget('artists','train'),'安排工作'
+  ));
+  const contentType=bestContentTypeForRecommendation();
+  if(contentType) actions.push(actionCard(
+    'release-'+contentType.id,'stage','🎵',
+    '发行'+contentType.name,
+    '已有出道艺人和制作条件，作品上线后会带来阶段性收益。',
+    actionTarget('content'),'去发行'
+  ));
+  if(G.artists.length<2&&G.money>=120&&publicArtistCount()>=1) actions.push(actionCard(
+    'recruit-second','stage','👥',
+    '补充第二位艺人',
+    '多艺人阵容能打开更多活动和长期目标，避免收入只依赖单人。',
+    actionTarget('artists'),'继续招募'
+  ));
+  const stage=currentCompanyStage();
+  const nextStageGoal=stage.goals.find(g=>!g.check());
+  if(nextStageGoal&&!actions.some(a=>a.desc.includes(nextStageGoal.text))) actions.push(actionCard(
+    'stage-next','stage','🏢',
+    '完成阶段目标',
+    '当前阶段下一步：'+nextStageGoal.text+'。',
+    nextStageGoal.text.includes('宣传')?actionTarget('buildings'):nextStageGoal.text.includes('活动')?actionTarget('events'):nextStageGoal.text.includes('发行')?actionTarget('content'):actionTarget('overview'),
+    '查看'
+  ));
+
+  const ev=firstAvailableEvent();
+  if(ev) opportunities.push(actionCard(
+    'event-'+ev.name,'opportunity','🏆',
+    ev.name+'可参加',
+    (G.timedEvents||[]).some(te=>te.id===ev.id)?'限时机会已出现，错过后会过期。':'条件已满足，可以派艺人换取收益和知名度。',
+    actionTarget('events'),'去参加'
+  ));
+  if((G.activeTrends||[]).some(t=>t.id==='streaming_rise')&&contentType) opportunities.push(actionCard(
+    'trend-content','opportunity','📈',
+    '市场利好内容发行',
+    '流媒体趋势正在提升单曲/专辑收益，适合安排作品上线。',
+    actionTarget('content'),'抓机会'
+  ));
+  if(G.fame>=80&&(G.agents||[]).length===0) opportunities.push(actionCard(
+    'hire-agent','opportunity','👔',
+    '招募第一位经纪人',
+    '经纪人能放大训练、公关或内容效率，适合公司进入扩张期后配置。',
+    actionTarget('agents'),'去签约'
+  ));
+  if((G.pendingBuilds||[]).length) opportunities.push(actionCard(
+    'pending-build','opportunity','🔨',
+    '等待设施完工',
+    (G.pendingBuilds||[]).slice(0,2).map(p=>G.buildings[p.k].name+' 还需 '+Math.max(0,p.completeAt-G.month)+' 月').join('，')+'。',
+    actionTarget('buildings'),'看建设'
+  ));
+
+  const picked=[];
+  [...risks,...actions,...opportunities].forEach(a=>{
+    if(picked.length<3&&!picked.some(x=>isSameAction(x,a))) picked.push(a);
+  });
+  if(!picked.length) picked.push(actionCard(
+    'stable','opportunity','✅',
+    '经营状态稳定',
+    '本月没有紧急问题，可以推进月份，或规划下一项设施、内容和活动。',
+    actionTarget('overview'),'留在总览'
+  ));
+
+  const stageProgress=getStageProgress(stage);
+  const currentGoal=picked[0];
+  return {stage,stageProgress,nextStageGoal,currentGoal,actions:picked,risks};
+}
+
 function renderOverviewTodos(ctx){
+  const plan=getOverviewActionPlan();
   const items=[];
-  if(!G.artists.length) items.push(['👤','招募第一位练习生，开启训练和内容发行','goTo(\'artists\')']);
-  if(G.buildings.live.lv===0) items.push(['📺','建造直播间，补充稳定现金流','goTo(\'buildings\')']);
-  ctx.lowEnergy.slice(0,3).forEach(a=>items.push(['⚡',displayName(a)+' 精力偏低，建议安排休息或使用休息室','goTo(\'artists\',\'train\')']));
-  ctx.lowPr.slice(0,2).forEach(a=>items.push(['📢',displayName(a)+' 口碑偏低，建议做公关处理','goTo(\'artists\',\'pr\')']));
-  ctx.expiring.slice(0,2).forEach(a=>items.push(['📋',displayName(a)+' 合同即将到期，建议续签','goTo(\'artists\',\'contracts\')']));
-  (G.pendingReleases||[]).slice(0,2).forEach(r=>items.push(['🎵','「'+r.title+'」制作中，预计第 '+r.goLiveAt+' 月上线','goTo(\'content\')']));
-  ctx.pendingBuilds.slice(0,2).forEach(p=>items.push(['🔨',G.buildings[p.k].name+' 施工中，还需 '+Math.max(0,p.completeAt-G.month)+' 月','goTo(\'buildings\')']));
-  if(!items.length) items.push(['✅','暂无紧急事项，可以推进月份或规划下一项建设','']);
+  plan.risks.forEach(a=>items.push([a.icon,a.title+'：'+a.desc,a.target,a.cta]));
+  (G.pendingReleases||[]).slice(0,2).forEach(r=>items.push(['🎵','「'+r.title+'」制作中，预计第 '+r.goLiveAt+' 月上线',actionTarget('content'),'查看']));
+  ctx.pendingBuilds.slice(0,2).forEach(p=>items.push(['🔨',G.buildings[p.k].name+' 施工中，还需 '+Math.max(0,p.completeAt-G.month)+' 月',actionTarget('buildings'),'查看']));
+  if(!items.length) items.push(['✅','暂无紧急事项，可以按「本月重点」规划下一步','','']);
   const el=document.getElementById('todo-overview');
-  if(el) el.innerHTML=items.slice(0,6).map(i=>`<div class="todo-item"><span>${i[0]}</span><div style="flex:1">${i[1]}</div>${i[2]?`<button class="btn btn-sm todo-btn" onclick="${i[2]}">去处理</button>`:''}</div>`).join('');
+  if(el) el.innerHTML=items.slice(0,6).map(i=>`<div class="todo-item"><span>${i[0]}</span><div style="flex:1">${i[1]}</div>${i[2]?`<button class="btn btn-sm todo-btn" onclick="${i[2]}">${i[3]||'去处理'}</button>`:''}</div>`).join('');
 }
 
 function renderOverviewTrend(){
@@ -3726,22 +3879,35 @@ function renderOverviewTrend(){
 }
 
 function updateTips(){
-  const tips=[];
-  const urgent=a=>`<div class="overview-action urgent">${a}</div>`;
-  const normal=a=>`<div class="overview-action">${a}</div>`;
-  const good=a=>`<div class="overview-action good">${a}</div>`;
-  if(G.artists.some(a=>a.status!=='休息中'&&(a.energy??80)<=30)) tips.push(urgent('有艺人精力偏低，优先安排休息，避免被迫停工。'));
-  if(G.buildings.live.lv===0) tips.push(normal('建议优先建造直播间，建立每月稳定收入。'));
-  if(G.artists.length===0) tips.push(normal('前往艺人管理招募第一位练习生。'));
-  if(G.artists.some(a=>a.status==='已出道')) tips.push(normal('有艺人已出道，前往训练安排让其接工作赚钱。'));
-  if((G.pendingBuilds||[]).length) tips.push(normal('有设施正在施工，推进月份后投入使用。'));
-  if(G.fame>=80&&G.artists.length>=2) tips.push(good('条件满足，可以考虑参加高收益活动或巡演。'));
-  if(!tips.length) tips.push(good('公司运转稳定，可以规划下一项建设或内容发行。'));
+  const plan=getOverviewActionPlan();
   const completed=(G.starterGoals||[]).length;
-  const stage=currentCompanyStage();
-  const stageProgress=getStageProgress(stage);
+  const stage=plan.stage;
+  const stageProgress=plan.stageProgress;
   const stageDone=(G.companyStages||[]).includes(stage.id);
   const stagePct=Math.round(stageProgress.done/stageProgress.total*100);
+  const mainAction=plan.currentGoal;
+  const actionHtml=`<div class="action-console">
+    <div class="action-goal-card">
+      <div>
+        <div class="action-eyebrow">本月主目标</div>
+        <div class="action-goal-title">${mainAction.icon} ${mainAction.title}</div>
+        <div class="action-goal-desc">${mainAction.desc}</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="${mainAction.target}">${mainAction.cta}</button>
+    </div>
+    <div class="action-card-list">
+      ${plan.actions.map(a=>`
+        <div class="action-card action-${a.kind}">
+          <div class="action-icon">${a.icon}</div>
+          <div class="action-body">
+            <div class="action-title">${a.title}</div>
+            <div class="action-desc">${a.desc}</div>
+          </div>
+          <button class="btn btn-sm action-btn" onclick="${a.target}">${a.cta}</button>
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
   const stageHtml=`<div class="company-stage">
     <div class="stage-head">
       <div>
@@ -3767,7 +3933,7 @@ function updateTips(){
       return `<div class="starter-goal ${done?'done':''}"><span>${done?'✓':'○'}</span><div><div>${g.title}</div><small>${g.reward}</small></div></div>`;
     }).join('')}
   </div>`;
-  document.getElementById('monthly-tips').innerHTML=tips.slice(0,3).join('')+stageHtml+goalHtml;
+  document.getElementById('monthly-tips').innerHTML=actionHtml+stageHtml+goalHtml;
 }
 
 function renderFinance(){
